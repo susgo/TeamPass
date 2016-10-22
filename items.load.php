@@ -1708,12 +1708,6 @@ function open_del_group_div()
 //###########
 function open_add_item_div()
 {
-    // is user read only
-    if ($("#user_is_read_only").length && $("#user_is_read_only").val() == "1") {
-        displayMessage("<?php echo $LANG['error_not_allowed_to'];?>");
-        return false;
-    }
-
     LoadingPage();
 
     //Check if personal SK is needed and set
@@ -1725,6 +1719,13 @@ function open_add_item_div()
         LoadingPage();
         $("#div_dialog_message_text").html("<div style='font-size:16px;'><span class='ui-icon ui-icon-alert' style='float: left; margin-right: .3em;'><\/span><?php echo addslashes($LANG['error_no_selected_folder']);?><\/div>").dialog("open");
     } else if ($('#recherche_group_pf').val() == 0 || ($('#recherche_group_pf').val() == 1 && $('#personal_sk_set').val() == 1)) {
+        // is user read only and it is not a personal folder
+        if ($('#recherche_group_pf').val() == 0 && $("#user_is_read_only").length && $("#user_is_read_only").val() == "1") {
+            displayMessage("<?php echo $LANG['error_not_allowed_to'];?>");
+            LoadingPage();
+            return false;
+        }
+
         //Select the actual forlder in the dialogbox
         $('#categorie').val($('#hid_cat').val());
 
@@ -1764,8 +1765,11 @@ function open_add_item_div()
 //###########
 function open_edit_item_div(restricted_to_roles)
 {
-    // is user read only
-    if (($("#user_is_read_only").length && $("#user_is_read_only").val() == "1") || $("#access_level").val() == "NE" || $("#access_level").val() == "NDNE") {
+    // is user read only and it is not a personal folder
+    if (
+        ($('#recherche_group_pf').val() == 0 && $("#user_is_read_only").length && $("#user_is_read_only").val() == "1") ||
+        $("#access_level").val() == "NE" || $("#access_level").val() == "NDNE"
+    ) {
         displayMessage("<?php echo $LANG['error_not_allowed_to'];?>");
         return false;
     }
@@ -1935,7 +1939,10 @@ function open_edit_item_div(restricted_to_roles)
 function open_del_item_div()
 {
     // is user read only
-    if ($("#user_is_read_only").val() == "1" || $("#access_level").val() == "ND" || $("#access_level").val() == "NDNE") {
+    if (
+        ($('#recherche_group_pf').val() == 0 && $("#user_is_read_only").length && $("#user_is_read_only").val() == "1") ||
+        $("#access_level").val() == "ND" || $("#access_level").val() == "NDNE"
+    ) {
         displayMessage("<i class='fa fa-warning'></i>&nbsp;<?php echo addslashes($LANG['error_not_allowed_to']);?>");
         return false;
     }
@@ -1963,7 +1970,7 @@ function open_del_item_div()
 function open_copy_item_to_folder_div()
 {
     // is user read only
-    if ($("#user_is_read_only").val() == "1") {
+    if ($('#recherche_group_pf').val() == 0 && $("#user_is_read_only").length && $("#user_is_read_only").val() == "1") {
         displayMessage("<i class='fa fa-warning'></i>&nbsp;<?php echo addslashes($LANG['error_not_allowed_to']);?>");
         return false;
     }
@@ -2498,10 +2505,11 @@ $(function() {
                 $.post(
                     "sources/items.queries.php",
                     {
-                        type    : "copy_item",
-                        item_id : $('#id_item').val(),
-                        folder_id : $('#copy_in_folder').val(),
-                        key        : "<?php echo $_SESSION['key'];?>"
+                        type        : "copy_item",
+                        item_id     : $('#id_item').val(),
+                        categorie   : $('#hid_cat').val(),
+                        folder_id   : $('#copy_in_folder').val(),
+                        key         : "<?php echo $_SESSION['key'];?>"
                     },
                     function(data) {
                         //check if format error
@@ -2754,10 +2762,11 @@ $(function() {
                 $.post(
                     "sources/items.queries.php",
                     {
-                        type    : "del_item",
-                        id      : $("#id_item").val(),
-                        label   : $("#hid_label").val(),
-                        key     : "<?php echo $_SESSION['key'];?>"
+                        type        : "del_item",
+                        id          : $("#id_item").val(),
+                        categorie   : $('#hid_cat').val(),
+                        label       : $("#hid_label").val(),
+                        key         : "<?php echo $_SESSION['key'];?>"
                     },
                     function(data) {
                         $("#div_loading").show();

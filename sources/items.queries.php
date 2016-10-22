@@ -95,7 +95,7 @@ if (isset($_POST['type'])) {
         */
         case "new_item":
             // Check KEY and rights
-            if ($_POST['key'] != $_SESSION['key'] || $_SESSION['user_read_only'] == true) {
+            if ($_POST['key'] != $_SESSION['key']) {
                 echo prepareExchangedData(array("error" => "ERR_KEY_NOT_CORRECT"), "encode");
                 break;
             }
@@ -124,6 +124,12 @@ if (isset($_POST['type'])) {
                     echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
                     break;
                 }
+            }            
+
+            // perform a check in case of Read-Only user creating an item in his PF
+            if ($_SESSION['user_read_only'] === true && !in_array($dataReceived['categorie'], $_SESSION['personal_folders'])) {
+                echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
+                break;
             }
 
             // is pwd empty?
@@ -379,7 +385,7 @@ if (isset($_POST['type'])) {
         */
         case "update_item":
             // Check KEY and rights
-            if ($_POST['key'] != $_SESSION['key'] || $_SESSION['user_read_only'] == true) {
+            if ($_POST['key'] != $_SESSION['key']) {
                 echo prepareExchangedData(array("error" => "ERR_KEY_NOT_CORRECT"), "encode");
                 break;
             }
@@ -416,6 +422,12 @@ if (isset($_POST['type'])) {
                 }
                 if (empty($dataItem['restricted_to'])) {
                     $restrictionActive = false;
+                }
+
+                // perform a check in case of Read-Only user creating an item in his PF
+                if ($_SESSION['user_read_only'] === true && !in_array($dataReceived['categorie'], $_SESSION['personal_folders'])) {
+                    echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
+                    break;
                 }
 
                 if (
@@ -830,9 +842,15 @@ if (isset($_POST['type'])) {
         */
         case "copy_item":
             // Check KEY and rights
-            if ($_POST['key'] != $_SESSION['key'] || $_SESSION['user_read_only'] == true) {
+            if ($_POST['key'] != $_SESSION['key']) {
                 $returnValues = '[{"error" : "not_allowed"}, {"error_text" : "'.addslashes($LANG['error_not_allowed_to']).'"}]';
                 echo $returnValues;
+                break;
+            }            
+
+            // perform a check in case of Read-Only user creating an item in his PF
+            if ($_SESSION['user_read_only'] === true && !in_array($_POST['categorie'], $_SESSION['personal_folders'])) {
+                echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
                 break;
             }
 
@@ -1472,11 +1490,18 @@ if (isset($_POST['type'])) {
         */
         case "del_item":
             // Check KEY and rights
-            if ($_POST['key'] != $_SESSION['key'] || $_SESSION['user_read_only'] == true) {
+            if ($_POST['key'] != $_SESSION['key']) {
                 $returnValues = '[{"error" : "not_allowed"}, {"error_text" : "'.addslashes($LANG['error_not_allowed_to']).'"}]';
                 echo $returnValues;
                 break;
             }
+
+            // perform a check in case of Read-Only user creating an item in his PF
+            if ($_SESSION['user_read_only'] === true && !in_array($dataReceived['categorie'], $_SESSION['personal_folders'])) {
+                echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
+                break;
+            }
+
             // delete item consists in disabling it
             DB::update(
                 prefix_table("items"),

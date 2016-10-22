@@ -757,7 +757,7 @@ global \$SETTINGS;
                             `label` varchar(255) NOT NULL,
                             `pw` text NOT NULL,
                             `pw_iv` text NOT NULL,
-                            `pw_len` int(5) NOT NULL,
+                            `pw_len` int(5) NOT NULL DEFAULT '0',
                             `description` text NOT NULL,
                             `author_id` int(12) NOT NULL,
                             `folder_id` int(12) NOT NULL,
