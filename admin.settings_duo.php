@@ -4,8 +4,8 @@
  * @file          admin.settings_duo.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -65,9 +65,11 @@ $events = "";
 if (file_exists($filename)) {
     //copy some constants from this existing file
     $settingsFile = file($filename);
-    while (list($key, $val) = each($settingsFile)) {
-        if (substr_count($val, "@define('SECUREPATH'")) {
-            $tmp_skfile = substr($val, 23, strpos($val, "');") - 23).'/sk.php';
+    if ($settingsFile !== false) {
+        while (list($key, $val) = each($settingsFile)) {
+            if (substr_count($val, "@define('SECUREPATH'")) {
+                $tmp_skfile = substr($val, 23, strpos($val, "');") - 23).'/sk.php';
+            }
         }
     }
 }
@@ -75,15 +77,17 @@ if (file_exists($filename)) {
 // read SK.PHP file
 $tmp_akey = $tmp_ikey = $tmp_skey = $tmp_host = "";
 $skFile = file($tmp_skfile);
-while (list($key, $val) = each($skFile)) {
-    if (substr_count($val, "@define('AKEY'") > 0) {
-        $tmp_akey = substr($val, 17, strpos($val, '")') - 17);
-    } elseif (substr_count($val, "@define('IKEY'") > 0) {
-        $tmp_ikey = substr($val, 17, strpos($val, '")') - 17);
-    } elseif (substr_count($val, "@define('SKEY'") > 0) {
-        $tmp_skey = substr($val, 17, strpos($val, '")') - 17);
-    } elseif (substr_count($val, "@define('HOST'") > 0) {
-        $tmp_host = substr($val, 17, strpos($val, '")') - 17);
+if ($skFile !== false) {
+    while (list($key, $val) = each($skFile)) {
+        if (substr_count($val, "@define('AKEY'") > 0) {
+            $tmp_akey = substr($val, 17, strlen($val) - 21);
+        } elseif (substr_count($val, "@define('IKEY'") > 0) {
+            $tmp_ikey = substr($val, 17, strlen($val) - 21);
+        } elseif (substr_count($val, "@define('SKEY'") > 0) {
+            $tmp_skey = substr($val, 17, strlen($val) - 21);
+        } elseif (substr_count($val, "@define('HOST'") > 0) {
+            $tmp_host = substr($val, 17, strlen($val) - 21);
+        }
     }
 }
 echo '
@@ -384,6 +388,7 @@ function SaveKeys()
     $("#save_wait").show();
 
     var data = "{\"akey\":\""+sanitizeString($("#duo_akey").val())+"\", \"ikey\":\""+sanitizeString($("#duo_ikey").val())+"\", \"skey\":\""+sanitizeString($("#duo_skey").val())+"\", \"host\":\""+sanitizeString($("#duo_host").val())+"\"}";
+    console.log(data);
     $.post(
         "sources/admin.queries.php",
         {

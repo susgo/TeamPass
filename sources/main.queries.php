@@ -1,11 +1,11 @@
 <?php
 /**
- *
+ * Teampass file 
  * @file          main.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -25,9 +25,9 @@ if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1) {
 
 // Load config
 if (file_exists('../includes/config/tp.config.php')) {
-    require_once '../includes/config/tp.config.php';
+    include_once '../includes/config/tp.config.php';
 } elseif (file_exists('./includes/config/tp.config.php')) {
-    require_once './includes/config/tp.config.php';
+    include_once './includes/config/tp.config.php';
 } else {
     throw new Exception("Error file '/includes/config/tp.config.php' not exists", 1);
 }
@@ -47,7 +47,7 @@ if (isset($post_type) && ($post_type === "ga_generate_qr"
     exit();
 } elseif ((isset($_SESSION['user_id']) && isset($_SESSION['key'])) ||
     (isset($post_type) && $post_type === "change_user_language"
-        && null !== filter_input(INPUT_POST, 'data', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES))
+    && null !== filter_input(INPUT_POST, 'data', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES))
 ) {
     // continue
     mainQuery();
@@ -63,17 +63,17 @@ if (isset($post_type) && ($post_type === "ga_generate_qr"
 function mainQuery()
 {
     global $server, $user, $pass, $database, $port, $encoding, $pre, $LANG;
-    global $SETTINGS;
+    global $SETTINGS, $SETTINGS_EXT;
 
     include $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
     header("Content-type: text/html; charset=utf-8");
     header("Cache-Control: no-cache, must-revalidate");
     error_reporting(E_ERROR);
-    require_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
-    require_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
+    include_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
+    include_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
 
     // connect to the server
-    require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
+    include_once $SETTINGS['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
     $pass = defuse_return_decrypted($pass);
     DB::$host = $server;
     DB::$user = $user;
@@ -86,7 +86,7 @@ function mainQuery()
     $link->set_charset($encoding);
 
     // User's language loading
-    require_once $SETTINGS['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
+    include_once $SETTINGS['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
     // Manage type of action asked
     switch (filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
         case "change_pw":
@@ -257,6 +257,8 @@ function mainQuery()
                                 $LANG['forgot_pw_email_subject'],
                                 $LANG['forgot_pw_email_body']." ".htmlspecialchars_decode($dataReceived['new_pw']),
                                 $row[0],
+                                $LANG,
+                                $SETTINGS,
                                 $LANG['forgot_pw_email_altbody_1']." ".htmlspecialchars_decode($dataReceived['new_pw'])
                             );
                         }
@@ -324,6 +326,7 @@ function mainQuery()
                 // Prepare variables
                 $login = htmlspecialchars_decode($dataReceived['login']);
 
+                // Get data about user
                 $data = DB::queryfirstrow(
                     "SELECT id, email
                     FROM ".prefix_table("users")."
@@ -374,7 +377,9 @@ function mainQuery()
                                 $gaTemporaryCode,
                                 $LANG['email_ga_text']
                             ),
-                            $data['email']
+                            $data['email'],
+                            $LANG,
+                            $SETTINGS
                         );
                     }
 
@@ -470,7 +475,14 @@ function mainQuery()
                     );
                 }
 
-                echo '[{'.sendEmail($LANG['forgot_pw_email_subject'], $textMail, $post_email, $textMailAlt).'}]';
+                echo '[{'.sendEmail(
+                    $LANG['forgot_pw_email_subject'],
+                    $textMail,
+                    $post_email,
+                    $LANG,
+                    $SETTINGS,
+                    $textMailAlt
+                ).'}]';
             } else {
                 // no one has this email ... alert
                 echo '[{"error":"error_email" , "message":"'.$LANG['forgot_my_pw_error_email_not_exist'].'"}]';
@@ -537,6 +549,8 @@ function mainQuery()
                         $LANG['forgot_pw_email_subject_confirm'],
                         $LANG['forgot_pw_email_body']." ".$newPwNotCrypted,
                         $dataUser['email'],
+                        $LANG,
+                        $SETTINGS,
                         strip_tags($LANG['forgot_pw_email_body'])." ".$newPwNotCrypted
                     )
                 );
@@ -619,7 +633,7 @@ function mainQuery()
                     $_SESSION['user_settings']['session_psk'] = $user_key_encoded;
                     setcookie(
                         "TeamPass_PFSK_".md5($_SESSION['user_id']),
-                        encrypt($filter_psk, ""),
+                        $user_key_encoded,
                         (!isset($SETTINGS['personal_saltkey_cookie_duration']) || $SETTINGS['personal_saltkey_cookie_duration'] == 0) ? time() + 60 * 60 * 24 : time() + 60 * 60 * 24 * $SETTINGS['personal_saltkey_cookie_duration'],
                         '/'
                     );
@@ -719,7 +733,7 @@ function mainQuery()
             // change salt
             setcookie(
                 "TeamPass_PFSK_".md5($_SESSION['user_id']),
-                encrypt($newPersonalSaltkey, ""),
+                $user_key_encoded,
                 time() + 60 * 60 * 24 * $SETTINGS['personal_saltkey_cookie_duration'],
                 '/'
             );
@@ -827,7 +841,9 @@ function mainQuery()
                         $ret = sendEmail(
                             $record['subject'],
                             $record['body'],
-                            $record['receivers']
+                            $record['receivers'],
+                            $LANG,
+                            $SETTINGS
                         );
 
                         if (strpos($ret, "error_mail_not_send") !== false) {
@@ -890,29 +906,36 @@ function mainQuery()
                 break;
             }
 
-            //Load PWGEN
-            $pwgen = new SplClassLoader('Encryption\PwGen', '../includes/libraries');
-            $pwgen->register();
-            $pwgen = new Encryption\PwGen\pwgen();
+            $generator = new SplClassLoader('PasswordGenerator\Generator', '../includes/libraries');
+            $generator->register();
+            $generator = new PasswordGenerator\Generator\ComputerPasswordGenerator();
 
-            $pwgen->setLength(filter_input(INPUT_POST, 'size', FILTER_SANITIZE_NUMBER_INT));
-            if (null !== filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_STRING)
-                && filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_STRING) === "true"
+            // Is PHP7 being used?
+            if (version_compare(PHP_VERSION, '7.0.0', '>=')) {
+                $php7generator = new SplClassLoader('PasswordGenerator\RandomGenerator', '../includes/libraries');
+                $php7generator->register();
+                $generator->setRandomGenerator(new PasswordGenerator\RandomGenerator\Php7RandomGenerator());
+            }
+
+            $generator->setLength((int) filter_input(INPUT_POST, 'size', FILTER_SANITIZE_NUMBER_INT));
+
+            if (null !== filter_input(INPUT_POST, 'secure_pwd', FILTER_SANITIZE_STRING)
+                && filter_input(INPUT_POST, 'secure_pwd', FILTER_SANITIZE_STRING) === "true"
             ) {
-                $pwgen->setSecure(true);
-                $pwgen->setSymbols(true);
-                $pwgen->setCapitalize(true);
-                $pwgen->setNumerals(true);
+                $generator->setSymbols(true);
+                $generator->setLowercase(true);
+                $generator->setUppercase(true);
+                $generator->setNumbers(true);
             } else {
-                $pwgen->setSecure((filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_STRING) === "true") ? true : false);
-                $pwgen->setNumerals((filter_input(INPUT_POST, 'numerals', FILTER_SANITIZE_STRING) === "true") ? true : false);
-                $pwgen->setCapitalize((filter_input(INPUT_POST, 'capitalize', FILTER_SANITIZE_STRING) === "true") ? true : false);
-                $pwgen->setSymbols((filter_input(INPUT_POST, 'symbols', FILTER_SANITIZE_STRING) === "true") ? true : false);
+                $generator->setLowercase((filter_input(INPUT_POST, 'lowercase', FILTER_SANITIZE_STRING) === "true") ? true : false);
+                $generator->setUppercase((filter_input(INPUT_POST, 'capitalize', FILTER_SANITIZE_STRING) === "true") ? true : false);
+                $generator->setNumbers((filter_input(INPUT_POST, 'numerals', FILTER_SANITIZE_STRING) === "true") ? true : false);
+                $generator->setSymbols((filter_input(INPUT_POST, 'symbols', FILTER_SANITIZE_STRING) === "true") ? true : false);
             }
 
             echo prepareExchangedData(
                 array(
-                    "key" => $pwgen->generate(),
+                    "key" => $generator->generatePasswords(),
                     "error" => ""
                 ),
                 "encode"
@@ -989,7 +1012,6 @@ function mainQuery()
 
             // get list of last items seen
             $x_counter = 1;
-            $return = "";
             $arrTmp = array();
             $arr_html = array();
             $rows = DB::query(
@@ -1060,11 +1082,10 @@ function mainQuery()
         case "save_token":
             $token = GenerateCryptKey(
                 null !== filter_input(INPUT_POST, 'size', FILTER_SANITIZE_NUMBER_INT) ? filter_input(INPUT_POST, 'size', FILTER_SANITIZE_NUMBER_INT) : 20,
-                null !== filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_STRING) ? filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_STRING) : false,
-                null !== filter_input(INPUT_POST, 'capital', FILTER_SANITIZE_STRING) ? filter_input(INPUT_POST, 'capital', FILTER_SANITIZE_STRING) : false,
-                null !== filter_input(INPUT_POST, 'numeric', FILTER_SANITIZE_STRING) ? filter_input(INPUT_POST, 'numeric', FILTER_SANITIZE_STRING) : false,
-                null !== filter_input(INPUT_POST, 'ambiguous', FILTER_SANITIZE_STRING) ? filter_input(INPUT_POST, 'ambiguous', FILTER_SANITIZE_STRING) : false,
-                null !== filter_input(INPUT_POST, 'symbols', FILTER_SANITIZE_STRING) ? filter_input(INPUT_POST, 'symbols', FILTER_SANITIZE_STRING) : false
+                null !== filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_BOOLEAN) ? filter_input(INPUT_POST, 'secure', FILTER_SANITIZE_BOOLEAN) : false,
+                null !== filter_input(INPUT_POST, 'numeric', FILTER_SANITIZE_BOOLEAN) ? filter_input(INPUT_POST, 'numeric', FILTER_SANITIZE_BOOLEAN) : false,
+                null !== filter_input(INPUT_POST, 'capital', FILTER_SANITIZE_BOOLEAN) ? filter_input(INPUT_POST, 'capital', FILTER_SANITIZE_BOOLEAN) : false,
+                null !== filter_input(INPUT_POST, 'symbols', FILTER_SANITIZE_BOOLEAN) ? filter_input(INPUT_POST, 'symbols', FILTER_SANITIZE_BOOLEAN) : false
             );
 
             // store in DB
@@ -1219,6 +1240,171 @@ function mainQuery()
 
             fileDelete(filter_input(INPUT_POST, 'filename', FILTER_SANITIZE_STRING));
 
+            break;
+
+        /**
+         * Generate BUG report
+         */
+        case "generate_bug_report":
+            if (filter_input(INPUT_POST, 'key', FILTER_SANITIZE_STRING) !== $_SESSION['key']) {
+                echo '[ { "error" : "key_not_conform" } ]';
+                break;
+            }
+
+            // Read config file
+            $tmp = '';
+            $list_of_options = '';
+            $url_found = '';
+            $anonym_url = '';
+            $tp_config_file = "../includes/config/tp.config.php";
+            $data = file($tp_config_file);
+            foreach ($data as $line) {
+                if (substr($line, 0, 4) === '    ') {
+                    // Remove extra spaces
+                    $line = str_replace('    ', '', $line);
+
+                    // Identify url to anonymize it
+                    if (strpos($line, 'cpassman_url') > 0 && empty($url_found) === true) {
+                        $url_found = substr($line, 19, strlen($line) - 22);//echo $url_found." ; ";
+                        $tmp = parse_url($url_found);
+                        $anonym_url = $tmp['scheme'] . '://<anonym_url>' . $tmp['path'];
+                        $line = "'cpassman_url' => '" . $anonym_url . "\n";
+                    }
+
+                    // Anonymize all urls
+                    if (empty($anonym_url) === false) {
+                        $line = str_replace($url_found, $anonym_url, $line);
+                    }
+
+                    // Clear bck_script_passkey
+                    if (strpos($line, 'bck_script_passkey') > 0) {
+                        $line = "'bck_script_passkey' => '<removed>'\n";
+                    }
+
+                    // Complete line to display
+                    $list_of_options .= $line;
+                }
+            }
+
+            // Get error
+            $err = error_get_last();
+
+            // Get 10 latest errors in Teampass
+            $teampass_errors = '';
+            $rows = DB::query(
+                "SELECT label, date AS error_date
+                FROM ".prefix_table("log_system")."
+                WHERE `type` LIKE 'error'
+                ORDER BY `date` DESC
+                LIMIT 0, 10"
+            );
+            if (DB::count() > 0) {
+                foreach ($rows as $record) {
+                    if (empty($teampass_errors) === true) {
+                        $teampass_errors = ' * '.date($SETTINGS['date_format'].' '.$SETTINGS['time_format'], $record['error_date']).' - '.$record['label'];
+                    } else {
+                        $teampass_errors .= '
+ * '.date($SETTINGS['date_format'].' '.$SETTINGS['time_format'], $record['error_date']).' - '.$record['label'];
+                    }
+                }
+            }
+
+            // Now prepare text
+            $txt = "### Steps to reproduce
+1.
+2.
+3.
+
+### Expected behaviour
+Tell us what should happen
+
+
+### Actual behaviour
+Tell us what happens instead
+
+### Server configuration
+**Operating system**: ".php_uname()."
+
+**Web server:** ".$_SERVER['SERVER_SOFTWARE']."
+
+**Database:** ".mysqli_get_server_info($link)."
+
+**PHP version:** ".PHP_VERSION."
+
+**Teampass version:** ".$SETTINGS_EXT['version_full']."
+
+**Teampass configuration file:**
+```
+" . $list_of_options . "
+```
+
+**Updated from an older Teampass or fresh install:**
+
+### Client configuration
+
+**Browser:** ".filter_input(INPUT_POST, 'browser_name', FILTER_SANITIZE_STRING)." - ".filter_input(INPUT_POST, 'browser_version', FILTER_SANITIZE_STRING)."
+
+**Operating system:** ".filter_input(INPUT_POST, 'os', FILTER_SANITIZE_STRING)." - ".filter_input(INPUT_POST, 'os_archi', FILTER_SANITIZE_STRING)."bits
+
+### Logs
+
+#### Web server error log
+```
+" . $err['message']." - ".$err['file']." (".$err['line'] .")
+```
+
+#### Teampass 10 last system errors
+```
+" . $teampass_errors ."
+```
+
+#### Log from the web-browser developer console (CTRL + SHIFT + i)
+```
+Insert the log here and especially the answer of the query that failed.
+```
+";
+
+            echo prepareExchangedData(
+                array(
+                    "html" => $txt,
+                    "error" => ""
+                ),
+                "encode"
+            );
+
+            break;
+
+            case "update_user_field":
+                // Check KEY
+                if (filter_input(INPUT_POST, 'key', FILTER_SANITIZE_STRING) !== filter_var($_SESSION['key'], FILTER_SANITIZE_STRING)) {
+                    echo '[ { "error" : "key_not_conform" } ]';
+                    break;
+                }
+
+                // decrypt and retreive data in JSON format
+                $dataReceived = prepareExchangedData(
+                    filter_input(INPUT_POST, 'data', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES),
+                    "decode"
+                );
+
+                // Prepare variables
+                $field = noHTML(htmlspecialchars_decode($dataReceived['field']));
+                $new_value = noHTML(htmlspecialchars_decode($dataReceived['new_value']));
+                $user_id = (htmlspecialchars_decode($dataReceived['user_id']));
+
+                DB::update(
+                    prefix_table("users"),
+                    array(
+                        $field => $new_value
+                        ),
+                    "id = %i",
+                    $user_id
+                );
+
+                // Update session
+                if ($field === 'user_api_key') {
+                  $_SESSION['user_settings']['api-key'] = $new_value;
+                }
             break;
     }
 }

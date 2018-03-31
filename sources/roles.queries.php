@@ -3,8 +3,8 @@
  * @file          roles.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -341,8 +341,8 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
                 ORDER BY title ASC".$sql_limit
             );
             foreach ($rows as $record) {
-                if ($_SESSION['is_admin'] == 1
-                    || ($_SESSION['user_manager'] == 1
+                if ($_SESSION['is_admin'] === '1'
+                    || (($_SESSION['user_manager'] === '1' || $_SESSION['user_can_manage_all_users'] === '1')
                         && (in_array($record['id'], $arrUserRoles) == true
                             || $record['creator_id'] == $_SESSION['user_id']
                         )

@@ -3,8 +3,8 @@
  * @file          kb.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -159,13 +159,15 @@ if (null !== $post_type) {
 
                 //add all items associated to this KB
                 foreach (explode(',', $kb_associated_to) as $item_id) {
-                    DB::insert(
-                        prefix_table("kb_items"),
-                        array(
-                            'kb_id' => $id,
-                            'item_id' => $item_id
-                        )
-                    );
+                    if (empty($item_id) === false) {
+                        DB::insert(
+                            prefix_table("kb_items"),
+                            array(
+                                'kb_id' => $id,
+                                'item_id' => $item_id
+                            )
+                        );
+                    }
                 }
 
                 echo '[ { "status" : "done" } ]';

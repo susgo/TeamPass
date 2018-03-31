@@ -3,8 +3,8 @@
  * @file          utils.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -493,8 +493,8 @@ if (null !== $post_type) {
 
         case "server_auto_update_password_frequency":
             if ($post_key !== $_SESSION['key']
-                || null !== filter_input(INPUT_POST, 'id', FILTER_SANITIZE_STRING)
-                || null !== filter_input(INPUT_POST, 'freq', FILTER_SANITIZE_STRING)
+                || null === filter_input(INPUT_POST, 'id', FILTER_SANITIZE_STRING)
+                || null === filter_input(INPUT_POST, 'freq', FILTER_SANITIZE_STRING)
             ) {
                 echo '[{"error" : "something_wrong"}]';
                 break;

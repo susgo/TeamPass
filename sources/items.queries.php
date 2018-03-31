@@ -3,8 +3,8 @@
  * @file          items.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -64,9 +64,6 @@ if (isset($SETTINGS_EXT['pwComplexity']) === false) {
     );
 }
 
-// Class loader
-require_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
-
 // Connect to mysql server
 require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Database/Meekrodb/db.class.php';
 $pass = defuse_return_decrypted($pass);
@@ -79,6 +76,9 @@ DB::$encoding = $encoding;
 DB::$error_handler = true;
 $link = mysqli_connect($server, $user, $pass, $database, $port);
 $link->set_charset($encoding);
+
+// Class loader
+require_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
 
 //Load Tree
 $tree = new SplClassLoader('Tree\NestedTree', '../includes/libraries');
@@ -372,6 +372,14 @@ if (null !== $post_type) {
                     if (empty($SETTINGS['email_server_url'])) {
                         $SETTINGS['email_server_url'] = $SETTINGS['cpassman_url'];
                     }
+
+                    // Get path
+                    $path = prepareEmaiItemPath(
+                        $dataReceived['categorie'],
+                        $label,
+                        $SETTINGS
+                    );
+
                     // send email
                     foreach (explode(';', $dataReceived['diffusion']) as $emailAddress) {
                         if (empty($emailAddress) === false) {
@@ -380,13 +388,15 @@ if (null !== $post_type) {
                                 $LANG['email_subject'],
                                 str_replace(
                                     array("#label", "#link"),
-                                    array(stripslashes($label), $SETTINGS['email_server_url'].'/index.php?page=items&group='.$dataReceived['categorie'].'&id='.$newID.$txt['email_body3']),
+                                    array($path, $SETTINGS['email_server_url'].'/index.php?page=items&group='.$dataReceived['categorie'].'&id='.$newID.$txt['email_body3']),
                                     $LANG['new_item_email_body']
                                 ),
                                 $emailAddress,
+                                $LANG,
+                                $SETTINGS,
                                 str_replace(
                                     array("#label", "#link"),
-                                    array(stripslashes($label), $SETTINGS['email_server_url'].'/index.php?page=items&group='.$dataReceived['categorie'].'&id='.$newID.$txt['email_body3']),
+                                    array($path, $SETTINGS['email_server_url'].'/index.php?page=items&group='.$dataReceived['categorie'].'&id='.$newID.$txt['email_body3']),
                                     $LANG['new_item_email_body']
                                 )
                             );
@@ -993,6 +1003,8 @@ if (null !== $post_type) {
                                         $LANG['email_body_item_updated']
                                     ),
                                     $emailAddress,
+                                    $LANG,
+                                    $SETTINGS,
                                     str_replace("#item_label#", $label, $LANG['email_bodyalt_item_updated'])
                                 );
                             }
@@ -1536,6 +1548,7 @@ if (null !== $post_type) {
                     || $dataItem['anyone_can_modify'] === '1'
                     || in_array($dataItem['id_tree'], $_SESSION['list_folders_editable_by_role'])
                     || in_array($_SESSION['user_id'], $restrictedTo)
+                    || count($restrictedTo) === 0
                 ) {
                     $arrData['user_can_modify'] = 1;
                     $user_is_allowed_to_modify = true;
@@ -1861,11 +1874,15 @@ if (null !== $post_type) {
                                 "decrypt"
                             );
                         } else {
-                            $reason[1] = cryption(
-                                $reason[1],
-                                $_SESSION['user_settings']['session_psk'],
-                                "decrypt"
-                            );
+                            if (isset($_SESSION['user_settings']['session_psk']) === true) {
+                                $reason[1] = cryption(
+                                    $reason[1],
+                                    $_SESSION['user_settings']['session_psk'],
+                                    "decrypt"
+                                );
+                            } else {
+                                $reason[1] = '';
+                            }
                         }
                         $reason[1] = @$reason[1]['string'];
                         // if not UTF8 then cleanup and inform that something is wrong with encrytion/decryption
@@ -1950,6 +1967,23 @@ if (null !== $post_type) {
 
                 // send notification if enabled
                 if (isset($SETTINGS['enable_email_notification_on_item_shown']) === true && $SETTINGS['enable_email_notification_on_item_shown'] === '1') {
+                    // Get path
+                    $arbo = $tree->getPath($dataItem['id_tree'], true);
+                    $path = '';
+                    foreach ($arbo as $elem) {
+                        if (empty($path) === true) {
+                            $path = htmlspecialchars(stripslashes(htmlspecialchars_decode($elem->title, ENT_QUOTES)), ENT_QUOTES).' ';
+                        } else {
+                            $path .= '&#8594; ' . htmlspecialchars(stripslashes(htmlspecialchars_decode($elem->title, ENT_QUOTES)), ENT_QUOTES);
+                        }
+                    }
+                    // Build text to show user
+                    if (empty($path) === true) {
+                        $path = addslashes($dataItem['label']);
+                    } else {
+                        $path = addslashes($dataItem['label']).' ('.$path.')';
+                    }
+
                     // send back infos
                     DB::insert(
                         prefix_table('emails'),
@@ -1960,7 +1994,7 @@ if (null !== $post_type) {
                                 array('#tp_user#', '#tp_item#', '#tp_link#'),
                                 array(
                                     addslashes($_SESSION['login']),
-                                    addslashes($dataItem['label']),
+                                    $path,
                                     $SETTINGS['cpassman_url']."/index.php?page=items&group=".$dataItem['id_tree']."&id=".$dataItem['id']
                                 ),
                                 $LANG['email_on_open_notification_mail']
@@ -2156,8 +2190,13 @@ if (null !== $post_type) {
             $post_target_folder_id = filter_var(htmlspecialchars_decode($dataReceived['target_folder_id']), FILTER_SANITIZE_NUMBER_INT);
 
             // Check that user can access this folder
-            if (!in_array($post_source_folder_id, $_SESSION['groupes_visibles'])
-                || !in_array($post_target_folder_id, $_SESSION['groupes_visibles'])
+            if ((
+                  in_array($post_source_folder_id, $_SESSION['groupes_visibles']) === false ||
+                  in_array($post_target_folder_id, $_SESSION['groupes_visibles']) === false) &&
+                  (
+                      $post_target_folder_id === '0' &&
+                      isset($SETTINGS['can_create_root_folder']) === true && $SETTINGS['can_create_root_folder'] === '1'
+                  )
             ) {
                 $returnValues = '[{"error" : "'.addslashes($LANG['error_not_allowed_to']).'"}]';
                 echo $returnValues;
@@ -2199,18 +2238,17 @@ if (null !== $post_type) {
                 break;
             }
 
-            if ($tmp_source['parent_id'] !== "0") {
-                // moving SOURCE folder
-                DB::update(
-                    prefix_table("nested_tree"),
-                    array(
-                        'parent_id' => $post_target_folder_id
-                        ),
-                    'id=%s',
-                    $post_source_folder_id
-                );
-                $tree->rebuild();
-            }
+
+            // moving SOURCE folder
+            DB::update(
+                prefix_table("nested_tree"),
+                array(
+                    'parent_id' => $post_target_folder_id
+                    ),
+                'id=%s',
+                $post_source_folder_id
+            );
+            $tree->rebuild();
 
 
             // send data
@@ -2346,7 +2384,6 @@ if (null !== $post_type) {
                     $counter = DB::count();
                     $uniqueLoadData['counter'] = $counter;
                 }
-
 
                 // Identify if it is a personal folder
                 if (in_array($post_id, $_SESSION['personal_visible_groups'])) {
@@ -2549,7 +2586,7 @@ if (null !== $post_type) {
                             $restrictedTo = "";
                         }
 
-                        if ($list_folders_editable_by_role === '1') {
+                        if ($list_folders_editable_by_role === true) {
                             if (empty($restrictedTo)) {
                                 $restrictedTo = $_SESSION['user_id'];
                             } else {
@@ -2559,7 +2596,7 @@ if (null !== $post_type) {
                         $html_json[$record['id']]['restricted'] = $restrictedTo;
 
                         // Can user modify it?
-                        if ($record['anyone_can_modify'] === '1'
+                        if (($record['anyone_can_modify'] === '1' && $_SESSION['user_read_only'] !== '1')
                             || $_SESSION['user_id'] === $record['log_user']
                             || ($_SESSION['user_read_only'] === '1' && $folderIsPf === false)
                             || (isset($SETTINGS['manager_edit']) && $SETTINGS['manager_edit'] === '1') // force draggable if user is manager
@@ -2580,20 +2617,31 @@ if (null !== $post_type) {
                             $record['perso'] = '1';
                         }
 
+                        // Now check 'list_restricted_folders_for_items'
+                        $item_limited_access = false;
+                        if (in_array($post_id, array_keys($_SESSION['list_restricted_folders_for_items'])) === true
+                            && in_array($post_id, array_keys($_SESSION['list_folders_limited'])) === false
+                        ) {
+                            if (in_array($record['id'], $_SESSION['list_restricted_folders_for_items'][$post_id]) === false) {
+                                $item_limited_access = true;
+                            }
+                        }
 
                         // CASE where item is restricted to a role to which the user is not associated
-                        if (isset($user_is_included_in_role)
+                        if (isset($user_is_included_in_role) === true
                             && $user_is_included_in_role === false
-                            && isset($item_is_restricted_to_role)
+                            && isset($item_is_restricted_to_role) === true
                             && $item_is_restricted_to_role === true
-                            && (int) $is_user_in_restricted_list !== 1
+                            && $is_user_in_restricted_list === false
                             && (int) $folder_is_personal !== 1
                         ) {
                             $html_json[$record['id']]['perso'] = "fa-tag mi-red";
                             $html_json[$record['id']]['sk'] = 0;
                             $html_json[$record['id']]['display'] = "no_display";
-                            $html_json[$record['id']]['open_edit'] = 1;
+                            $html_json[$record['id']]['open_edit'] = 0;
                             $html_json[$record['id']]['reload'] = "";
+                            $html_json[$record['id']]['accessLevel'] = 3;
+                            $html_json[$record['id']]['canMove'] = 0;
                             $findPfGroup = 0;
                             $displayItem = false;
                             $need_sk = false;
@@ -2612,10 +2660,12 @@ if (null !== $post_type) {
                             $html_json[$record['id']]['display'] = "";
                             $html_json[$record['id']]['open_edit'] = 1;
                             $html_json[$record['id']]['reload'] = "";
+                            $html_json[$record['id']]['accessLevel'] = 0;
+                            $html_json[$record['id']]['canMove'] = 1;
                         // CAse where item is restricted to a group of users included user
-                        } elseif (empty($record['restricted_to']) === false
-                            || (int) $list_folders_editable_by_role === 1
-                            && (int) $is_user_in_restricted_list === 1
+                        } elseif ((empty($record['restricted_to']) === false
+                            || $list_folders_editable_by_role === true)
+                            && $is_user_in_restricted_list === true
                         ) {
                             $html_json[$record['id']]['perso'] = "fa-tag mi-yellow";
                             $findPfGroup = 0;
@@ -2625,23 +2675,25 @@ if (null !== $post_type) {
                             $html_json[$record['id']]['display'] = "";
                             $html_json[$record['id']]['open_edit'] = 1;
                             $html_json[$record['id']]['reload'] = "";
+                            $html_json[$record['id']]['accessLevel'] = 0;
+                            $html_json[$record['id']]['canMove'] = ($_SESSION['user_read_only'] === '1' && $folderIsPf === false) ? 0 : 1;
                         // CAse where item is restricted to a group of users not including user
                         } elseif ((int) $record['perso'] === 1
                             ||
                             (
                                 empty($record['restricted_to']) === false
-                                && (int) $is_user_in_restricted_list !== 1
+                                && $is_user_in_restricted_list === false
                             )
                             ||
                             (
-                                isset($user_is_included_in_role)
-                                && isset($item_is_restricted_to_role)
+                                isset($user_is_included_in_role) === true
+                                && isset($item_is_restricted_to_role) === true
                                 && $user_is_included_in_role === false
                                 && $item_is_restricted_to_role === true
                             )
                         ) {
-                            if (isset($user_is_included_in_role)
-                                && isset($item_is_restricted_to_role)
+                            if (isset($user_is_included_in_role) === true
+                                && isset($item_is_restricted_to_role) === true
                                 && $user_is_included_in_role === false
                                 && $item_is_restricted_to_role === true
                             ) {
@@ -2654,6 +2706,8 @@ if (null !== $post_type) {
                                 $html_json[$record['id']]['display'] = "no_display";
                                 $html_json[$record['id']]['open_edit'] = 0;
                                 $html_json[$record['id']]['reload'] = "";
+                                $html_json[$record['id']]['accessLevel'] = 3;
+                                $html_json[$record['id']]['canMove'] = 0;
                             } else {
                                 $html_json[$record['id']]['perso'] = "fa-tag mi-yellow";
                                 // reinit in case of not personal group
@@ -2662,14 +2716,16 @@ if (null !== $post_type) {
                                     $init_personal_folder = true;
                                 }
 
-                                if (empty($record['restricted_to']) === false && $is_user_in_restricted_list === '1') {
+                                if (empty($record['restricted_to']) === false && $is_user_in_restricted_list === true) {
                                     $displayItem = true;
                                 }
 
                                 $html_json[$record['id']]['sk'] = 0;
                                 $html_json[$record['id']]['display'] = "";
-                                $html_json[$record['id']]['open_edit'] = 1;
+                                $html_json[$record['id']]['open_edit'] = 0;
                                 $html_json[$record['id']]['reload'] = "";
+                                $html_json[$record['id']]['accessLevel'] = 0;
+                                $html_json[$record['id']]['canMove'] = 0;
                             }
                         } else {
                             $html_json[$record['id']]['perso'] = "fa-tag mi-green";
@@ -2681,13 +2737,13 @@ if (null !== $post_type) {
                             }
 
                             $html_json[$record['id']]['sk'] = 0;
-                            $html_json[$record['id']]['display'] = "";
+                            $html_json[$record['id']]['display'] = $item_limited_access === true ? "no_display" : "";
                             $html_json[$record['id']]['open_edit'] = 1;
                             $html_json[$record['id']]['reload'] = "";
+                            $html_json[$record['id']]['accessLevel'] = $item_limited_access === true ? 0 : $accessLevel;
+                            $html_json[$record['id']]['canMove'] = $accessLevel === 0 ? (($_SESSION['user_read_only'] === '1' && $folderIsPf === false) ? 0 : 1) : $canMove;
                         }
 
-                        $html_json[$record['id']]['canMove'] = 1;
-                        $html_json[$record['id']]['accessLevel'] = 0;
                         $html_json[$record['id']]['pw_status'] = "";
 
                         // increment array for icons shortcuts (don't do if option is not enabled)
@@ -2892,7 +2948,9 @@ if (null !== $post_type) {
 
             // check if user can perform this action
             if (null !== $post_context && empty($post_context) === false) {
-                if ($post_context === "create_folder" || $post_context === "edit_folder" || $post_context === "delete_folder") {
+                if ($post_context === "create_folder" || $post_context === "edit_folder"
+                    || $post_context === "delete_folder" || $post_context === "copy_folder"
+                ) {
                     if ($_SESSION['is_admin'] !== '1'
                         && ($_SESSION['user_manager'] !== '1')
                         && (
@@ -3263,11 +3321,11 @@ if (null !== $post_type) {
                     );
 
                     // Check that user can access this folder
-                    if (!in_array($dataSource['id_tree'], $_SESSION['groupes_visibles'])
-                        || !in_array($post_folder_id, $_SESSION['groupes_visibles'])
+                    if (in_array($dataSource['id_tree'], $_SESSION['groupes_visibles']) === false
+                        || in_array($post_folder_id, $_SESSION['groupes_visibles']) === false
                     ) {
                         echo '[{"error":"not_allowed" , "status":"ok"}]';
-                        break;
+                        exit();
                     }
 
                     // get data about new folder
@@ -3285,7 +3343,7 @@ if (null !== $post_type) {
                                 'id_tree' => $post_folder_id
                                 ),
                             "id=%i",
-                            $post_item_id
+                            $item_id
                         );
                     } elseif ($dataSource['personal_folder'] === '0' && $dataDestination['personal_folder'] === '1') {
                         $decrypt = cryption(
@@ -3390,17 +3448,16 @@ if (null !== $post_type) {
                     );
 
                     // Check that user can access this folder
-                    if (!in_array($dataSource['id_tree'], $_SESSION['groupes_visibles'])
-                        || !in_array($post_folder_id, $_SESSION['groupes_visibles'])
+                    if (in_array($dataSource['id_tree'], $_SESSION['groupes_visibles']) === false
                     ) {
-                        echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
-                        break;
+                        echo '[{"error":"'.addslashes($LANG['error_not_allowed_to']).'" , "status":"nok"}]';
+                        exit();
                     }
 
                     // perform a check in case of Read-Only user creating an item in his PF
                     if ($_SESSION['user_read_only'] === true) {
-                        echo prepareExchangedData(array("error" => "ERR_FOLDER_NOT_ALLOWED"), "encode");
-                        break;
+                        echo '[{"error":"'.addslashes($LANG['error_not_allowed_to']).'" , "status":"nok"}]';
+                        exit();
                     }
 
                     // delete item consists in disabling it
@@ -3443,11 +3500,25 @@ if (null !== $post_type) {
                 }
                 if ($post_cat === "request_access_to_author") {
                     $dataAuthor = DB::queryfirstrow("SELECT email,login FROM ".prefix_table("users")." WHERE id= ".$content[1]);
-                    $dataItem = DB::queryfirstrow("SELECT label FROM ".prefix_table("items")." WHERE id= ".$content[0]);
+                    $dataItem = DB::queryfirstrow("SELECT label, id_tree FROM ".prefix_table("items")." WHERE id= ".$content[0]);
+
+                    // Get path
+                    $path = prepareEmaiItemPath(
+                        $dataItem['id_tree'],
+                        $dataItem['label'],
+                        $SETTINGS
+                    );
+                    
                     $ret = sendEmail(
                         $LANG['email_request_access_subject'],
-                        str_replace(array('#tp_item_author#', '#tp_user#', '#tp_item#'), array(" ".addslashes($dataAuthor['login']), addslashes($_SESSION['login']), addslashes($dataItem['label'])), $LANG['email_request_access_mail']),
-                        $dataAuthor['email']
+                        str_replace(
+                            array('#tp_item_author#', '#tp_user#', '#tp_item#'),
+                            array(" ".addslashes($dataAuthor['login']), addslashes($_SESSION['login']), $path),
+                            $LANG['email_request_access_mail']
+                        ),
+                        $dataAuthor['email'],
+                        $LANG,
+                        $SETTINGS
                     );
                 } elseif ($post_cat === "share_this_item") {
                     $dataItem = DB::queryfirstrow(
@@ -3456,15 +3527,25 @@ if (null !== $post_type) {
                         WHERE id= %i",
                         $post_id
                     );
+
+                    // Get path
+                    $path = prepareEmaiItemPath(
+                        $dataItem['id_tree'],
+                        $dataItem['label'],
+                        $SETTINGS
+                    );
+                    
                     // send email
                     $ret = sendEmail(
                         $LANG['email_share_item_subject'],
                         str_replace(
                             array('#tp_link#', '#tp_user#', '#tp_item#'),
-                            array($SETTINGS['email_server_url'].'/index.php?page=items&group='.$dataItem['id_tree'].'&id='.$post_id, addslashes($_SESSION['login']), addslashes($dataItem['label'])),
+                            array($SETTINGS['email_server_url'].'/index.php?page=items&group='.$dataItem['id_tree'].'&id='.$post_id, addslashes($_SESSION['login']), addslashes($path)),
                             $LANG['email_share_item_mail']
                         ),
-                        $post_receipt
+                        $post_receipt,
+                        $LANG,
+                        $SETTINGS
                     );
                 }
                 echo '[{'.$ret.'}]';
@@ -3641,7 +3722,7 @@ if (null !== $post_type) {
             }
 
             // generate session
-            $otv_code = GenerateCryptKey(32, false, true, true, true, false);
+            $otv_code = GenerateCryptKey(32, false, true, true, false);
 
             DB::insert(
                 prefix_table("otv"),
@@ -4067,11 +4148,15 @@ if (null !== $post_type) {
                             "decrypt"
                         );
                     } else {
-                        $reason[1] = cryption(
-                            $reason[1],
-                            $_SESSION['user_settings']['session_psk'],
-                            "decrypt"
-                        );
+                        if (isset($_SESSION['user_settings']['session_psk']) === true) {
+                            $reason[1] = cryption(
+                                $reason[1],
+                                $_SESSION['user_settings']['session_psk'],
+                                "decrypt"
+                            );
+                        } else {
+                            $reason[1] = '';
+                        }
                     }
                     $reason[1] = @$reason[1]['string'];
                     // if not UTF8 then cleanup and inform that something is wrong with encrytion/decryption
@@ -4188,7 +4273,9 @@ if (null !== $post_type) {
                 sendEmail(
                     $LANG['suggestion_notify_subject'],
                     str_replace(array('#tp_label#', '#tp_user#', '#tp_folder#'), array(addslashes($label), addslashes($resp_user['login']), addslashes($resp_folder['title'])), $LANG['suggestion_notify_body']),
-                    $record['email']
+                    $record['email'],
+                    $LANG,
+                    $SETTINGS
                 );
             }
 
@@ -4222,6 +4309,68 @@ if (null !== $post_type) {
 
             // send data
             echo prepareExchangedData($data, "encode");
+            break;
+
+        case "send_request_access":
+            // Check KEY
+            if ($post_key !== $_SESSION['key']) {
+                echo '[ { "error" : "key_not_conform" } ]';
+                break;
+            }
+
+            // decrypt and retrieve data in JSON format
+            $data_received = prepareExchangedData($post_data, "decode");
+
+            // prepare variables
+            $emailText = htmlspecialchars_decode($data_received['text'], ENT_QUOTES);
+            $item_id = htmlspecialchars_decode($data_received['item_id']);
+            $user_id = htmlspecialchars_decode($data_received['user_id']);
+
+            // Send email
+            $dataAuthor = DB::queryfirstrow("SELECT email,login FROM ".prefix_table("users")." WHERE id= ".$user_id);
+            $dataItem = DB::queryfirstrow("SELECT label, id_tree FROM ".prefix_table("items")." WHERE id= ".$item_id);
+
+            // Get path
+            $path = prepareEmaiItemPath(
+                $dataItem['id_tree'],
+                $dataItem['label'],
+                $SETTINGS
+            );
+
+            $ret = sendEmail(
+                $LANG['email_request_access_subject'],
+                str_replace(
+                  array(
+                      '#tp_item_author#',
+                      '#tp_user#',
+                      '#tp_item#',
+                      '#tp_reason#'
+                  ),
+                  array(
+                      " ".addslashes($dataAuthor['login']),
+                      addslashes($_SESSION['login']),
+                      $path,
+                      nl2br(addslashes($emailText))
+                  ),
+                  $LANG['email_request_access_mail']
+                ),
+                $dataAuthor['email'],
+                $LANG,
+                $SETTINGS
+            );
+
+            // Do log
+            logItems(
+              $item_id,
+              $dataItem['label'],
+              $_SESSION['user_id'],
+              'at_access',
+              $_SESSION['login']
+            );
+
+            // Return
+            echo '[ { "error" : "" } ]';
+
             break;
     }
 }
@@ -4288,14 +4437,52 @@ function fileFormatImage($ext)
     return $image;
 }
 
-/*
-* FUNCTION
-* permits to remplace some specific characters in password
-*/
+/**
+ * Returns a cleaned up password
+ *
+ * @param string $pwd
+ * @return void
+ */
 function passwordReplacement($pwd)
 {
     $pwPatterns = array('/ETCOMMERCIAL/', '/SIGNEPLUS/');
     $pwRemplacements = array('&', '+');
 
     return preg_replace($pwPatterns, $pwRemplacements, $pwd);
+}
+
+/**
+ * Returns the Item + path 
+ *
+ * @param integer $id_tree
+ * @param string $label
+ * @param array $SETTINGS
+ * @return string
+ */
+function prepareEmaiItemPath($id_tree, $label, $SETTINGS) {
+    // Class loader
+    require_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
+
+    //Load Tree
+    $tree = new SplClassLoader('Tree\NestedTree', '../includes/libraries');
+    $tree->register();
+    $tree = new Tree\NestedTree\NestedTree(prefix_table("nested_tree"), 'id', 'parent_id', 'title');
+
+    $arbo = $tree->getPath($id_tree, true);
+    $path = '';
+    foreach ($arbo as $elem) {
+        if (empty($path) === true) {
+            $path = htmlspecialchars(stripslashes(htmlspecialchars_decode($elem->title, ENT_QUOTES)), ENT_QUOTES).' ';
+        } else {
+            $path .= '&#8594; ' . htmlspecialchars(stripslashes(htmlspecialchars_decode($elem->title, ENT_QUOTES)), ENT_QUOTES);
+        }
+    }
+    // Build text to show user
+    if (empty($path) === true) {
+        $path = addslashes($label);
+    } else {
+        $path = addslashes($label).' ('.$path.')';
+    }
+
+    return $path;
 }

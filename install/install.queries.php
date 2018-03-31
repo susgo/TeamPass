@@ -3,8 +3,8 @@
  * @file          install.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -212,7 +212,8 @@ if (null !== $post_type) {
                     $dbTmp,
                     "CREATE TABLE IF NOT EXISTS `_install` (
                     `key` varchar(100) NOT NULL,
-                    `value` varchar(500) NOT NULL
+                    `value` varchar(500) NOT NULL,
+                    PRIMARY KEY (`key`)
                     ) CHARSET=utf8;"
                 );
                 // store values
@@ -347,13 +348,15 @@ if (null !== $post_type) {
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."log_items` (
+                            `increment_id` int(12) NOT NULL AUTO_INCREMENT,
                             `id_item` int(8) NOT NULL,
                             `date` varchar(50) NOT NULL,
                             `id_user` int(8) NOT NULL,
                             `action` varchar(250) NULL,
                             `raison` text NULL,
                             `raison_iv` text NULL,
-                            `encryption_type` VARCHAR(20) NOT NULL DEFAULT 'not_set'
+                            `encryption_type` VARCHAR(20) NOT NULL DEFAULT 'not_set',
+                            PRIMARY KEY (`increment_id`)
                             ) CHARSET=utf8;"
                         );
                         // create index
@@ -429,6 +432,7 @@ global \$SETTINGS;
                             array('admin', 'ldap_tls', '0'),
                             array('admin', 'ldap_elusers', '0'),
                             array('admin', 'ldap_search_base', '0'),
+                            array('admin', 'ldap_port', '389'),
                             array('admin', 'richtext', '0'),
                             array('admin', 'allow_print', '0'),
                             array('admin', 'roles_allowed_to_print', '0'),
@@ -510,7 +514,10 @@ global \$SETTINGS;
                             array('admin', 'enable_attachment_encryption', '1'),
                             array('admin', 'personal_saltkey_security_level', '50'),
                             array('admin', 'ldap_new_user_is_administrated_by', '0'),
-                            array('admin', 'disable_show_forgot_pwd_link', '0')
+                            array('admin', 'disable_show_forgot_pwd_link', '0'),
+                            array('admin', 'offline_key_level', '0'),
+                            array('admin', 'enable_http_request_login', '0'),
+                            array('admin', 'ldap_and_local_authentication', '0')
                         );
                         foreach ($aMiscVal as $elem) {
                             //Check if exists before inserting
@@ -558,7 +565,7 @@ global \$SETTINGS;
                             `bloquer_creation` tinyint(1) NOT null DEFAULT '0',
                             `bloquer_modification` tinyint(1) NOT null DEFAULT '0',
                             `personal_folder` tinyint(1) NOT null DEFAULT '0',
-                            `renewal_period` TINYINT(4) NOT null DEFAULT '0',
+                            `renewal_period` int(5) NOT null DEFAULT '0',
                             PRIMARY KEY (`id`),
                             KEY `nested_tree_parent_id` (`parent_id`),
                             KEY `nested_tree_nleft` (`nleft`),
@@ -621,6 +628,7 @@ global \$SETTINGS;
                             `agses-usercardid` VARCHAR(50) NOT NULL DEFAULT '0',
                             `encrypted_psk` text NULL,
                             `user_ip` varchar(400) NOT null DEFAULT 'none',
+                            `user_api_key` varchar(500) NOT null DEFAULT 'none',
                             PRIMARY KEY (`id`),
                             UNIQUE KEY `login` (`login`)
                             ) CHARSET=utf8;"
@@ -697,6 +705,7 @@ global \$SETTINGS;
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."cache` (
+                            `increment_id`INT(12) NOT NULL AUTO_INCREMENT,
                             `id` int(12) NOT NULL,
                             `label` varchar(500) NOT NULL,
                             `description` text NOT NULL,
@@ -710,7 +719,8 @@ global \$SETTINGS;
                             `renewal_period` tinyint(4) NOT NULL DEFAULT '0',
                             `timestamp` varchar(50) DEFAULT NULL,
                             `url` varchar(500) NOT NULL DEFAULT '0',
-                            `encryption_type` VARCHAR(50) DEFAULT NULL DEFAULT '0'
+                            `encryption_type` VARCHAR(50) DEFAULT NULL DEFAULT '0',
+                            PRIMARY KEY (`increment_id`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "roles_title") {
@@ -729,6 +739,7 @@ global \$SETTINGS;
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."roles_values` (
+                            `increment_id` int(12) NOT NULL AUTO_INCREMENT PRIMARY KEY,
                             `role_id` int(12) NOT NULL,
                             `folder_id` int(12) NOT NULL,
                             `type` varchar(5) NOT NULL DEFAULT 'R',
@@ -762,23 +773,25 @@ global \$SETTINGS;
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."kb_items` (
                             `kb_id` int(12) NOT NULL,
-                            `item_id` int(12) NOT NULL
+                            `item_id` int(12) NOT NULL,
+                            PRIMARY KEY (`kb_id`)
                            ) CHARSET=utf8;"
                         );
                     } elseif ($task == "restriction_to_roles") {
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."restriction_to_roles` (
+                            `increment_id` int(12) NOT NULL AUTO_INCREMENT PRIMARY KEY,
                             `role_id` int(12) NOT NULL,
                             `item_id` int(12) NOT NULL,
-                            KEY `role_id_idx`  (`role_id`)
+                            PRIMARY KEY (`increment_id`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "languages") {
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."languages` (
-                            `id` INT(10) NOT null AUTO_INCREMENT PRIMARY KEY ,
+                            `id` INT(10) NOT null AUTO_INCREMENT PRIMARY KEY,
                             `name` VARCHAR(50) NOT null ,
                             `label` VARCHAR(50) NOT null ,
                             `code` VARCHAR(10) NOT null ,
@@ -808,6 +821,12 @@ global \$SETTINGS;
                                 ('swedish', 'Swedish' , 'se', 'se.png'),
                                 ('dutch', 'Dutch' , 'nl', 'nl.png'),
                                 ('catalan', 'Catalan' , 'ct', 'ct.png'),
+                                ('bulgarian', 'Bulgarian' , 'bg', 'bg.png'),
+                                ('greek', 'Greek' , 'gr', 'gr.png'),
+                                ('hungarian', 'Hungarian' , 'hu', 'hu.png'),
+                                ('polish', 'Polish' , 'pl', 'pl.png'),
+                                ('romanian', 'Romanian' , 'ro', 'ro.png'),
+                                ('ukrainian', 'Ukrainian' , 'ua', 'ua.png'),
                                 ('vietnamese', 'Vietnamese' , 'vi', 'vi.png'),
                                 ('estonian', 'Estonian' , 'ee', 'ee.png');"
                             );
@@ -816,11 +835,13 @@ global \$SETTINGS;
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."emails` (
+                            `increment_id` int(12) NOT NULL AUTO_INCREMENT,
                             `timestamp` INT(30) NOT null ,
                             `subject` VARCHAR(255) NOT null ,
                             `body` TEXT NOT null ,
                             `receivers` VARCHAR(255) NOT null ,
-                            `status` VARCHAR(30) NOT NULL
+                            `status` VARCHAR(30) NOT NULL,
+                            PRIMARY KEY (`increment_id`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "automatic_del") {
@@ -830,16 +851,20 @@ global \$SETTINGS;
                             `item_id` int(11) NOT NULL,
                             `del_enabled` tinyint(1) NOT NULL,
                             `del_type` tinyint(1) NOT NULL,
-                            `del_value` varchar(35) NOT NULL
+                            `del_value` varchar(35) NOT NULL,
+                            PRIMARY KEY (`item_id`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "items_edition") {
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."items_edition` (
+                            `increment_id` int(12) NOT NULL AUTO_INCREMENT,
                             `item_id` int(11) NOT NULL,
                             `user_id` int(12) NOT NULL,
-                            `timestamp` varchar(50) NOT NULL
+                            `timestamp` varchar(50) NOT NULL,
+                            KEY `item_id_idx` (`item_id`),
+                            PRIMARY KEY (`increment_id`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "categories") {
@@ -875,7 +900,8 @@ global \$SETTINGS;
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."categories_folders` (
                             `id_category` int(12) NOT NULL,
-                            `id_folder` int(12) NOT NULL
+                            `id_folder` int(12) NOT NULL,
+                            PRIMARY KEY (`id_category`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "api") {
@@ -923,6 +949,7 @@ global \$SETTINGS;
                         $mysqli_result = mysqli_query(
                             $dbTmp,
                             "CREATE TABLE IF NOT EXISTS `".$var['tbl_prefix']."export` (
+                            `increment_id` int(12) NOT NULL AUTO_INCREMENT,
                             `id` int(12) NOT NULL,
                             `label` varchar(500) NOT NULL,
                             `login` varchar(100) NOT NULL,
@@ -932,7 +959,8 @@ global \$SETTINGS;
                             `email` varchar(500) NOT NULL default 'none',
                             `url` varchar(500) NOT NULL default 'none',
                             `kbs` varchar(500) NOT NULL default 'none',
-                            `tags` varchar(500) NOT NULL default 'none'
+                            `tags` varchar(500) NOT NULL default 'none',
+                            PRIMARY KEY (`increment_id`)
                             ) CHARSET=utf8;"
                         );
                     } elseif ($task === "tokens") {

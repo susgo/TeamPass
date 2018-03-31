@@ -4,8 +4,8 @@
  * @file          admin.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -15,9 +15,9 @@
 
 require_once 'SecureHandler.php';
 session_start();
-if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 ||
-    !isset($_SESSION['user_id']) || empty($_SESSION['user_id']) ||
-    !isset($_SESSION['key']) || empty($_SESSION['key'])
+if (isset($_SESSION['CPM']) === false || $_SESSION['CPM'] != 1 ||
+    isset($_SESSION['user_id']) === false || empty($_SESSION['user_id']) ||
+    isset($_SESSION['key']) === false || empty($_SESSION['key'])
 ) {
     die('Hacking attempt...');
 }
@@ -40,8 +40,8 @@ if (!checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_settings")) {
     exit();
 }
 
-include $SETTINGS['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
-include $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
+require_once $SETTINGS['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
+require_once $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
 require_once $SETTINGS['cpassman_dir'].'/includes/config/tp.config.php';
 
 header("Content-type: text/html; charset=utf-8");
@@ -100,7 +100,27 @@ switch ($post_type) {
         if (!isset($SETTINGS_EXT['admin_no_info']) || (isset($SETTINGS_EXT['admin_no_info']) && $SETTINGS_EXT['admin_no_info'] == 0)) {
             if (isset($SETTINGS['get_tp_info']) && $SETTINGS['get_tp_info'] == 1) {
                 // Get info about Teampass
-                $context = stream_context_create(array('http' => array('ignore_errors' => true)));
+                if (isset($SETTINGS['proxy_ip']) === true && empty($SETTINGS['proxy_ip']) === false &&
+                    isset($SETTINGS['proxy_port']) === true && empty($SETTINGS['proxy_port']) === false
+                ) {
+                    $context = stream_context_create(
+                        array(
+                            'http' => array(
+                                'ignore_errors' => true,
+                                'proxy' =>  $SETTINGS['proxy_ip'] . ':' . $SETTINGS['proxy_port']
+                            )
+                        )
+                    );
+                } else {
+                    $context = stream_context_create(
+                        array(
+                            'http' => array(
+                                'ignore_errors' => true
+                            )
+                        )
+                    );
+                }
+                
                 $json = file_get_contents('https://teampass.net/utils/teampass_info.json', false, $context);
                 if ($json) {
                     $json_array = json_decode($json, true);
@@ -326,10 +346,11 @@ switch ($post_type) {
             //save file
             $filename = time().'-'.$token.'.sql';
             $handle = fopen($SETTINGS['path_to_files_folder']."/".$filename, 'w+');
-
-            //write file
-            fwrite($handle, $return);
-            fclose($handle);
+            if ($handle !== false) {
+                //write file
+                fwrite($handle, $return);
+                fclose($handle);
+            }
 
             // Encrypt the file
             if (empty($post_option) === false) {
@@ -488,32 +509,37 @@ switch ($post_type) {
         //read folder
         $dir = opendir($SETTINGS['path_to_files_folder']);
 
-        //delete file FILES
-        while (false !== ($f = readdir($dir))) {
-            if ($f != "." && $f !== ".." && $f !== ".htaccess") {
-                if ((time() - filectime($dir.$f)) > 604800) {
-                    fileDelete($SETTINGS['path_to_files_folder']."/".$f);
-                    $nbFilesDeleted++;
+        if ($dir !== false) {
+            //delete file FILES
+            while (false !== ($f = readdir($dir))) {
+                if ($f != "." && $f !== ".." && $f !== ".htaccess") {
+                    if ((time() - filectime($dir.$f)) > 604800) {
+                        fileDelete($SETTINGS['path_to_files_folder']."/".$f);
+                        $nbFilesDeleted++;
+                    }
                 }
             }
+
+            //Close dir
+            closedir($dir);
         }
-        //Close dir
-        closedir($dir);
 
         //read folder  UPLOAD
         $dir = opendir($SETTINGS['path_to_upload_folder']);
 
-        //delete file
-        while (false !== ($f = readdir($dir))) {
-            if ($f != "." && $f !== "..") {
-                if (strpos($f, "_delete.") > 0) {
-                    fileDelete($SETTINGS['path_to_upload_folder']."/".$f);
-                    $nbFilesDeleted++;
+        if ($dir !== false) {
+            //delete file
+            while (false !== ($f = readdir($dir))) {
+                if ($f != "." && $f !== "..") {
+                    if (strpos($f, "_delete.") > 0) {
+                        fileDelete($SETTINGS['path_to_upload_folder']."/".$f);
+                        $nbFilesDeleted++;
+                    }
                 }
             }
+            //Close dir
+            closedir($dir);
         }
-        //Close dir
-        closedir($dir);
 
         //Show done
         echo '[{"result":"purge_old_files","nb_files_deleted":"'.$nbFilesDeleted.'"}]';
@@ -534,7 +560,7 @@ switch ($post_type) {
     case "admin_action_rebuild_config_file":
         $error = "";
 
-        require_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
+        include_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
         $ret = handleConfigFile("rebuild");
 
         if ($ret !== true) {
@@ -573,11 +599,11 @@ switch ($post_type) {
                 $err = "";
 
                 // it means that file is DEFUSE encrypted
-                require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/Crypto.php';
-                require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/DerivedKeys.php';
-                require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/KeyOrPassword.php';
-                require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/File.php';
-                require_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/Core.php';
+                include_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/Crypto.php';
+                include_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/DerivedKeys.php';
+                include_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/KeyOrPassword.php';
+                include_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/File.php';
+                include_once $SETTINGS['cpassman_dir'].'/includes/libraries/Encryption/Encryption/Core.php';
 
                 try {
                     \Defuse\Crypto\File::decryptFileWithPassword(
@@ -596,18 +622,21 @@ switch ($post_type) {
             } else {
                     // file is bCrypt encrypted
                 $inF = fopen($Fnm, "r");
-                while (!feof($inF)) {
-                    $return .= fgets($inF, 4096);
+                if ($inF !== false) {
+                    while (!feof($inF)) {
+                        $return .= fgets($inF, 4096);
+                    }
+                    fclose($inF);
                 }
-                fclose($inF);
-
 
                 $return = Encryption\Crypt\aesctr::decrypt($return, $tp_settings['bck_script_key'], 256);
 
                 //save the file
                 $handle = fopen($tp_settings['bck_script_path'].'/'.$filename.'.clear'.'.sql', 'w+');
-                fwrite($handle, $return);
-                fclose($handle);
+                if ($handle !== false) {
+                    fwrite($handle, $return);
+                    fclose($handle);
+                }
             }
             $result = "backup_decrypt_success";
             $msg = $tp_settings['bck_script_path'].'/'.$filename.'.clear'.'.sql';
@@ -636,7 +665,7 @@ switch ($post_type) {
 
 
         // generate new saltkey
-        $old_sk_filename = SECUREPATH."/teampass-seckey.txt".'.'.date("Y_m_d", mktime(0, 0, 0, date('m'), date('d'), date('y'))).'.'.time();
+        $old_sk_filename = SECUREPATH."/teampass-seckey.txt".'.'.date("Y_m_d", mktime(0, 0, 0, (int)date('m'), (int)date('d'), (int)date('y'))).'.'.time();
         copy(
             SECUREPATH."/teampass-seckey.txt",
             $old_sk_filename
@@ -1155,7 +1184,14 @@ switch ($post_type) {
             echo '[{"result":"email_test_conf", "error":"error_mail_not_send" , "message":"User has no email defined!"}]';
         } else {
             require_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
-            echo '[{"result":"email_test_conf", '.sendEmail($LANG['admin_email_test_subject'], $LANG['admin_email_test_body'], $_SESSION['user_email']).'}]';
+            echo '[{"result":"email_test_conf", '.
+                sendEmail(
+                    $LANG['admin_email_test_subject'],
+                    $LANG['admin_email_test_body'],
+                    $_SESSION['user_email'],
+                    $LANG,
+                    $SETTINGS
+                ).'}]';
         }
         break;
 
@@ -1172,7 +1208,9 @@ switch ($post_type) {
                 @sendEmail(
                     $record['subject'],
                     $record['body'],
-                    $record['receivers']
+                    $record['receivers'],
+                    $LANG,
+                    $SETTINGS
                 )
             );
 
@@ -1195,92 +1233,8 @@ switch ($post_type) {
         //update LOG
         logEvents('admin_action', 'Emails backlog', $_SESSION['user_id'], $_SESSION['login']);
 
-        echo '[{"result":"admin_email_send_backlog", '.@sendEmail($LANG['admin_email_test_subject'], $LANG['admin_email_test_body'], $SETTINGS['email_from']).'}]';
+        echo '[{"result":"admin_email_send_backlog", "error : ""}]';
         break;
-
-    /*
-    * Generate exchanges encryption keys
-    */
-    case "admin_action_generate_encrypt_keys":
-        require_once("../includes/libraries/jCryption/jcryption.php");
-        $keyLength = 1024;
-        $jCryption = new jCryption();
-        $numberOfPairs = 100;
-        $arrKeyPairs = array();
-        for ($i = 0; $i < $numberOfPairs; $i++) {
-            $arrKeyPairs[] = $jCryption->generateKeypair($keyLength);
-        }
-        $file = array();
-        $file[] = '<?php';
-        $file[] = '$arrKeys = ';
-        $file[] = var_export($arrKeyPairs, true);
-        $file[] = ';';
-        file_put_contents(SECUREPATH."/".$numberOfPairs."_".$keyLength."_keys.inc.php", implode("\n", $file));
-
-        echo '[{"result":"generated_keys_file", "error":""}]';
-        break;
-
-    /*
-    * Correct passwords prefix
-    */
-    /*case "admin_action_pw_prefix_correct":
-        require_once 'main.functions.php';
-        $numOfItemsChanged = 0;
-        // go for all Items and get their PW
-        $rows = DB::query("SELECT id, pw, pw_iv FROM ".prefix_table("items")." WHERE perso = %s", "0");
-        foreach ($rows as $record) {
-            // check if key exists for this item
-            DB::query("SELECT * FROM ".prefix_table("keys")." WHERE `id` = %i AND `sql_table` = %s", $record['id'], "items");
-            $counter = DB::count();
-            if ($counter == 0) {
-                $storePrefix = false;
-                // decrypt pw
-                $pw = cryption($record['pw'], SALT, $record['pw_iv'], "decrypt");
-                if (!empty($pw['string']) && strlen($pw['string']) > 15 && isutf8($pw['string'])) {
-                    // Pw seems to have a prefix
-                    // get old prefix
-                    $randomKey = substr($pw, 0, 15);
-                    // check if prefix contains only lowercase and numerics
-                    //TODO
-                    // should we store?
-                    $storePrefix = true;
-                } elseif (!empty($pw) && isutf8($pw)) {
-                    // Pw doesn't seem to have a prefix
-
-                    // re-encrypt with key prefix
-                    $randomKey = generateKey();
-                    $pw = $randomKey.$pw;
-                    $pw = encrypt($pw);
-
-                    // store pw
-                    DB::update(
-                        prefix_table("items"),
-                        array(
-                            'pw' => $pw
-                        ),
-                        "id=%s",
-                        $record['id']
-                    );
-                    // should we store?
-                    $storePrefix = true;
-                }
-                if ($storePrefix === true) {
-                    // store key prefix
-                    DB::insert(
-                        prefix_table("keys"),
-                        array(
-                            'table'     => 'items',
-                            'id'        => $record['id'],
-                            'rand_key'  => $randomKey
-                        )
-                    );
-                }
-
-                $numOfItemsChanged++;
-            }
-        }
-        echo '[{"result":"pw_prefix_correct", "error":"", "ret":"'.$LANG['alert_message_done'].' '.$numOfItemsChanged.' '.$LANG['items_changed'].'"}]';
-        break;*/
 
     /*
     * Attachments encryption
@@ -1597,7 +1551,7 @@ switch ($post_type) {
                     $tmp_skfile,
                     $tmp_skfile.'.'.date(
                         "Y_m_d",
-                        mktime(0, 0, 0, date('m'), date('d'), date('y'))
+                        mktime(0, 0, 0, (int)date('m'), (int)date('d'), (int)date('y'))
                     )
                 )) {
                     echo '[{"result" : "" , "error" : "Could NOT perform a copy of file: '.$tmp_skfile.'"}]';
@@ -1614,21 +1568,22 @@ switch ($post_type) {
 
         // Write back values in sk.php file
         $fh = fopen($tmp_skfile, 'w');
-        $result2 = fwrite(
-            $fh,
-            utf8_encode(
-                "<?php
-@define('COST', '13'); // Don't change this.
-// DUOSecurity credentials
-@define('AKEY', '".(string) $akey."');
-@define('IKEY', '".(string) $ikey."');
-@define('SKEY', '".(string) $skey."');
-@define('HOST', '".(string) $host."');
-?>"
-            )
-        );
-        fclose($fh);
-
+        if ($fh !== false) {
+            $result2 = fwrite(
+                $fh,
+                utf8_encode(
+                    "<?php
+    @define('COST', '13'); // Don't change this.
+    // DUOSecurity credentials
+    @define('AKEY', '".(string) $akey."');
+    @define('IKEY', '".(string) $ikey."');
+    @define('SKEY', '".(string) $skey."');
+    @define('HOST', '".(string) $host."');
+    ?>"
+                )
+            );
+            fclose($fh);
+        }
 
 
         // send data
@@ -1703,7 +1658,7 @@ switch ($post_type) {
             }
             $SETTINGS['ga_website_name'] = htmlspecialchars_decode($dataReceived['ga_website_name']);
 
-                
+
             // save change in config file
             handleConfigFile("update", 'ga_website_name', $SETTINGS['ga_website_name']);
         } else {
@@ -1829,7 +1784,7 @@ switch ($post_type) {
             "decode"
         );
         $type = "admin";
-
+        
         require_once 'main.functions.php';
 
         // In case of key, then encrypt it
@@ -1913,7 +1868,7 @@ switch ($post_type) {
         }
 
         // special Cases
-        if ($dataReceived['field'] == "cpassman_url") {
+        if ($dataReceived['field'] === "cpassman_url") {
             // update also jsUrl for CSFP protection
             $jsUrl = $dataReceived['value'].'/includes/libraries/csrfp/js/csrfprotector.js';
             $csrfp_file = "../includes/libraries/csrfp/libs/csrfp.config.php";
@@ -1923,7 +1878,7 @@ switch ($post_type) {
             $line = substr($data, $posJsUrl, ($posEndLine - $posJsUrl + 2));
             $newdata = str_replace($line, '"jsUrl" => "'.filter_var($jsUrl, FILTER_SANITIZE_STRING).'",', $data);
             file_put_contents($csrfp_file, $newdata);
-        } elseif ($dataReceived['field'] == "restricted_to_input" && $dataReceived['value'] == "0") {
+        } elseif ($dataReceived['field'] === "restricted_to_input" && $dataReceived['value'] === "0") {
             DB::update(
                 prefix_table("misc"),
                 array(
@@ -2043,7 +1998,7 @@ switch ($post_type) {
 
     case "admin_ldap_test_configuration":
         // Check
-        if (null !== $post_option || empty($post_option) === true) {
+        if (null === $post_option || empty($post_option) === true) {
             echo '[{ "option" : "admin_ldap_test_configuration", "error" : "No options" }]';
             break;
         }
@@ -2076,7 +2031,6 @@ switch ($post_type) {
             }
 
             $debug_ldap .= "LDAP URIs : ".$ldapURIs."<br/>";
-
             $ldapconn = ldap_connect($ldapURIs);
 
             if ($dataReceived[0]['ldap_tls_input']) {
@@ -2085,63 +2039,81 @@ switch ($post_type) {
 
             $debug_ldap .= "LDAP connection : ".($ldapconn ? "Connected" : "Failed")."<br/>";
 
-            ldap_set_option($ldapconn, LDAP_OPT_PROTOCOL_VERSION, 3);
             if ($ldapconn) {
-                $ldapbind = @ldap_bind($ldapconn, $dataReceived[0]['ldap_bind_dn'], $dataReceived[0]['ldap_bind_passwd']);
+              $debug_ldap .= "DN : ".$dataReceived[0]['ldap_bind_dn']." -- ".$dataReceived[0]['ldap_bind_passwd']."<br/>";
+                ldap_set_option($ldapconn, LDAP_OPT_PROTOCOL_VERSION, 3);
+                ldap_set_option($ldapconn, LDAP_OPT_REFERRALS, 0);
+                $ldapbind = ldap_bind($ldapconn, $dataReceived[0]['ldap_bind_dn'], $dataReceived[0]['ldap_bind_passwd']);
 
                 $debug_ldap .= "LDAP bind : ".($ldapbind ? "Bound" : "Failed")."<br/>";
 
                 if ($ldapbind) {
-                    $filter = "(&(".$dataReceived[0]['ldap_user_attribute']."=$username)(objectClass=".$dataReceived[0]['ldap_object_class']."))";
+                    $filter = "(&(".$dataReceived[0]['ldap_user_attribute']."=".$dataReceived[0]['username'].")(objectClass=".$dataReceived[0]['ldap_object_class']."))";
+                    //echo $filter;
                     $result = ldap_search(
                         $ldapconn,
                         $dataReceived[0]['ldap_search_base'],
                         $filter,
-                        array('dn', 'mail', 'givenname', 'sn')
+                        array('dn', 'mail', 'givenname', 'sn', 'uid')
                     );
                     if (isset($dataReceived[0]['ldap_usergroup'])) {
-                        $filter_group = "memberUid=".$username;
+                        $GroupRestrictionEnabled = false;
+                        $filter_group = "memberUid=".$dataReceived[0]['username'];
                         $result_group = ldap_search(
                             $ldapconn,
-                            $dataReceived[0]['ldap_usergroup'],
+                            $dataReceived[0]['ldap_search_base'],
                             $filter_group,
                             array('dn')
                         );
 
                         $debug_ldap .= 'Search filter (group): '.$filter_group."<br/>".
-                                    'Results : '.print_r(ldap_get_entries($ldapconn, $result_group), true)."<br/>";
+                          'Results : '.str_replace("\n","<br>", print_r(ldap_get_entries($ldapconn, $result_group), true))."<br/>";
 
-                        if (!ldap_count_entries($ldapconn, $result_group)) {
-                                $ldapConnection = "Error - No entries found";
+                        if ($result_group) {
+                            $entries = ldap_get_entries($ldapconn, $result_group);
+
+                            if ($entries['count'] > 0) {
+                                // Now check if group fits
+                                for ($i=0; $i<$entries['count']; $i++) {
+                                  $parsr=ldap_explode_dn($entries[$i]['dn'], 0);
+                                  if (str_replace(array('CN=','cn='), '', $parsr[0]) === $SETTINGS['ldap_usergroup']) {
+                                    $GroupRestrictionEnabled = true;
+                                    break;
+                                  }
+                                }
+
+                            }
                         }
+
+                        $debug_ldap .= 'Find user in Group: '.$GroupRestrictionEnabled."<br/>";
                     }
 
                     $debug_ldap .= 'Search filter : '.$filter."<br/>".
-                            'Results : '.print_r(ldap_get_entries($ldapconn, $result), true)."<br/>";
+                            'Results : '.str_replace("\n","<br>", print_r(ldap_get_entries($ldapconn, $result), true))."<br/>";
 
                     if (ldap_count_entries($ldapconn, $result)) {
                         // try auth
                         $result = ldap_get_entries($ldapconn, $result);
                         $user_dn = $result[0]['dn'];
-                        $ldapbind = ldap_bind($ldapconn, $user_dn, $passwordClear);
+                        $ldapbind = ldap_bind($ldapconn, $user_dn, $dataReceived[0]['username_pwd']);
                         if ($ldapbind) {
-                            $ldapConnection = "Successfully connected";
+                            $debug_ldap .= "Successfully connected";
                         } else {
-                            $ldapConnection = "Error - Cannot connect user!";
+                            $debug_ldap .= "Error - Cannot connect user!";
                         }
                     }
                 } else {
-                    $ldapConnection = "Error - Could not bind server!";
+                    $debug_ldap .= "Error - Could not bind server!";
                 }
             } else {
-                $ldapConnection = "Error - Could not connect to server!";
+                $debug_ldap .= "Error - Could not connect to server!";
             }
         } else {
             $debug_ldap .= "Get all ldap params: <br/>".
                 '  - base_dn : '.$dataReceived[0]['ldap_domain_dn']."<br/>".
                 '  - account_suffix : '.$dataReceived[0]['ldap_suffix']."<br/>".
                 '  - domain_controllers : '.$dataReceived[0]['ldap_domain_controler']."<br/>".
-                '  - port : '.$dataReceived[0]['ldap_port']."<br/>".
+                '  - ad_port : '.$dataReceived[0]['ldap_port']."<br/>".
                 '  - use_ssl : '.$dataReceived[0]['ldap_ssl_input']."<br/>".
                 '  - use_tls : '.$dataReceived[0]['ldap_tls_input']."<br/>*********<br/>";
 
@@ -2159,7 +2131,7 @@ switch ($post_type) {
                     'base_dn' => $dataReceived[0]['ldap_domain_dn'],
                     'account_suffix' => $ldap_suffix,
                     'domain_controllers' => explode(",", $dataReceived[0]['ldap_domain_controler']),
-                    'port' => $dataReceived[0]['ldap_port'],
+                    'ad_port' => $dataReceived[0]['ldap_port'],
                     'use_ssl' => $dataReceived[0]['ldap_ssl_input'],
                     'use_tls' => $dataReceived[0]['ldap_tls_input']
                 )
@@ -2223,7 +2195,8 @@ switch ($post_type) {
             array(
                 "id" => 0,
                 "title" => addslashes($LANG['god']),
-                "selected" => isset($SETTINGS['ldap_new_user_is_administrated_by']) && $SETTINGS['ldap_new_user_is_administrated_by'] === "0" ? 1 : 0
+                "selected_administrated_by" => isset($SETTINGS['ldap_new_user_is_administrated_by']) && $SETTINGS['ldap_new_user_is_administrated_by'] === "0" ? 1 : 0,
+                "selected_role" => isset($SETTINGS['ldap_new_user_role']) && $SETTINGS['ldap_new_user_role'] === "0" ? 1 : 0
             )
         );
 
@@ -2237,8 +2210,9 @@ switch ($post_type) {
                 $json,
                 array(
                     "id" => $record['id'],
-                    "title" => addslashes($LANG['managers_of']." ".$record['title']),
-                    "selected" => isset($SETTINGS['ldap_new_user_is_administrated_by']) === true && $SETTINGS['ldap_new_user_is_administrated_by'] === $record['id'] ? 1 : 0
+                    "title" => addslashes($record['title']),
+                    "selected_administrated_by" => isset($SETTINGS['ldap_new_user_is_administrated_by']) === true && $SETTINGS['ldap_new_user_is_administrated_by'] === $record['id'] ? 1 : 0,
+                    "selected_role" => isset($SETTINGS['ldap_new_user_role']) === true && $SETTINGS['ldap_new_user_role'] === $record['id'] ? 1 : 0,
                 )
             );
         }

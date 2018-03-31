@@ -3,8 +3,8 @@
  * @file          users.queries.table.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-require_once('../SecureHandler.php');
+require '../SecureHandler.php';
 session_start();
 if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1) {
     die('Hacking attempt...');
@@ -20,14 +20,14 @@ if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1) {
 
 // Load config
 if (file_exists('../../includes/config/tp.config.php')) {
-    require_once '../../includes/config/tp.config.php';
+    include_once '../../includes/config/tp.config.php';
 } else {
     throw new Exception("Error file '/includes/config/tp.config.php' not exists", 1);
 }
 
 global $k, $settings;
-include $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
-include $SETTINGS['cpassman_dir'].'/includes/config/include.php';
+require_once $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
+require_once $SETTINGS['cpassman_dir'].'/includes/config/include.php';
 require_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
 require_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
 header("Content-type: text/html; charset=utf-8");

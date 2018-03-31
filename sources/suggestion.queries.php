@@ -3,8 +3,8 @@
  * @file          suggestion.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -146,7 +146,9 @@ if (null !== $post_type) {
                     sendEmail(
                         $LANG['suggestion_notify_subject'],
                         str_replace(array('#tp_label#', '#tp_user#', '#tp_folder#'), array(addslashes($label), addslashes($resp_user['login']), addslashes($resp_folder['title'])), $LANG['suggestion_notify_body']),
-                        $record['email']
+                        $record['email'],
+                        $LANG,
+                        $SETTINGS
                     );
                 }
 

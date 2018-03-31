@@ -4,8 +4,8 @@
  * @file          users.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link        http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -15,18 +15,18 @@
 
 require_once 'SecureHandler.php';
 session_start();
-if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 ||
-    !isset($_SESSION['user_id']) || empty($_SESSION['user_id']) ||
-    !isset($_SESSION['key']) || empty($_SESSION['key'])
+if (isset($_SESSION['CPM']) === false || $_SESSION['CPM'] != 1
+    || isset($_SESSION['user_id']) === false || empty($_SESSION['user_id']) === true
+    || isset($_SESSION['key']) === false || empty($_SESSION['key']) === true
 ) {
     die('Hacking attempt...');
 }
 
 // Load config
 if (file_exists('../includes/config/tp.config.php')) {
-    require_once '../includes/config/tp.config.php';
+    include_once '../includes/config/tp.config.php';
 } elseif (file_exists('./includes/config/tp.config.php')) {
-    require_once './includes/config/tp.config.php';
+    include_once './includes/config/tp.config.php';
 } else {
     throw new Exception("Error file '/includes/config/tp.config.php' not exists", 1);
 }
@@ -35,15 +35,14 @@ if (file_exists('../includes/config/tp.config.php')) {
 require_once $SETTINGS['cpassman_dir'].'/includes/config/include.php';
 require_once $SETTINGS['cpassman_dir'].'/sources/checks.php';
 $filtered_newvalue = filter_input(INPUT_POST, 'newValue', FILTER_SANITIZE_STRING);
-if (!checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_users")) {
+if (checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_users") === false) {
     if (null === $filtered_newvalue) {
         $_SESSION['error']['code'] = ERR_NOT_ALLOWED; //not allowed page
         include $SETTINGS['cpassman_dir'].'/error.php';
         exit();
     } else {
-        $filtered_newvalue = filter_input(INPUT_POST, 'newValue', FILTER_SANITIZE_STRING);
         // Do special check to allow user to change attributes of his profile
-        if (empty($filtered_newvalue) || !checkUser($_SESSION['user_id'], $_SESSION['key'], "profile")) {
+        if (empty($filtered_newvalue) || checkUser($_SESSION['user_id'], $_SESSION['key'], "profile") === false) {
             $_SESSION['error']['code'] = ERR_NOT_ALLOWED; //not allowed page
             include $SETTINGS['cpassman_dir'].'/error.php';
             exit();
@@ -52,7 +51,7 @@ if (!checkUser($_SESSION['user_id'], $_SESSION['key'], "manage_users")) {
 }
 
 
-include $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
+require $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
 header("Content-type: text/html; charset=utf-8");
 require_once $SETTINGS['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
 require_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
@@ -206,6 +205,18 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
                     // rebuild tree
                     $tree->rebuild();
                 }
+
+                // Create the API key
+                DB::insert(
+                    prefix_table("api"),
+                    array(
+                        'type' => 'user',
+                        'label' => $new_user_id,
+                        'value' => uniqidReal(39),
+                        'timestamp' => time()
+                        )
+                );
+
                 // get links url
                 if (empty($SETTINGS['email_server_url'])) {
                     $SETTINGS['email_server_url'] = $SETTINGS['cpassman_url'];
@@ -214,7 +225,9 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
                 sendEmail(
                     $LANG['email_subject_new_user'],
                     str_replace(array('#tp_login#', '#tp_pw#', '#tp_link#'), array(" ".addslashes($login), addslashes($pw), $SETTINGS['email_server_url']), $LANG['email_new_user_mail']),
-                    $dataReceived['email']
+                    $dataReceived['email'],
+                    $LANG,
+                    $SETTINGS
                 );
                 // update LOG
                 logEvents('user_mngt', 'at_user_added', $_SESSION['user_id'], $_SESSION['login'], $new_user_id);
@@ -902,7 +915,7 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
                 if ($_SESSION['is_admin'] === "1"
                     || (in_array($data_user['isAdministratedByRole'], $_SESSION['user_roles']))
                     || ($_SESSION['user_can_manage_all_users'] === "1" && $data_user['admin'] !== "1")
-                    ) {
+                ) {
                     DB::update(
                         prefix_table("users"),
                         array(
@@ -928,7 +941,7 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
 
             $post_id = filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT);
 
-            // Get info about user to delete
+            // Get info about user
             $rowUser = DB::queryfirstrow(
                 "SELECT *
                 FROM ".prefix_table("users")."
@@ -938,7 +951,7 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
 
             // Is this user allowed to do this?
             if ($_SESSION['is_admin'] === "1"
-                || (in_array($rowUser['isAdministratedByRole'], $_SESSION['user_roles']))
+                || (in_array($rowUser['isAdministratedByRole'], $_SESSION['user_roles']) === true)
                 || ($_SESSION['user_can_manage_all_users'] === "1" && $rowUser['admin'] !== "1")
             ) {
                 $arrData = array();
@@ -960,7 +973,10 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
 
                 $rows = DB::query("SELECT id,title,creator_id FROM ".prefix_table("roles_title"));
                 foreach ($rows as $record) {
-                    if ($_SESSION['is_admin'] == 1 || ($_SESSION['user_manager'] == 1 && (in_array($record['id'], $my_functions) || $record['creator_id'] == $_SESSION['user_id']))) {
+                    if ($_SESSION['is_admin'] === '1'
+                        || (($_SESSION['user_manager'] === '1' || $_SESSION['user_can_manage_all_users'] === "1")
+                        && (in_array($record['id'], $my_functions) || $record['creator_id'] == $_SESSION['user_id']))
+                    ) {
                         if (in_array($record['id'], $users_functions)) {
                             $tmp = ' selected="selected"';
 
@@ -1130,10 +1146,19 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
             $account_status_action = filter_var(htmlspecialchars_decode($dataReceived['action_on_user']), FILTER_SANITIZE_STRING);
             $post_id = filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT);
             $post_login = filter_var(htmlspecialchars_decode($dataReceived['login']), FILTER_SANITIZE_STRING);
+            $post_email = filter_var(htmlspecialchars_decode($dataReceived['email']), FILTER_SANITIZE_STRING);
+            $post_lastname = filter_var(htmlspecialchars_decode($dataReceived['lastname']), FILTER_SANITIZE_STRING);
+            $post_name = filter_var(htmlspecialchars_decode($dataReceived['name']), FILTER_SANITIZE_STRING);
 
             // Empty user
             if (empty($post_login) === true) {
                 echo '[ { "error" : "'.addslashes($LANG['error_empty_data']).'" } ]';
+                break;
+            }
+
+            // User has email?
+            if (empty($post_email) === true) {
+                echo '[ { "error" : "'.addslashes($LANG['error_no_email']).'" } ]';
                 break;
             }
 
@@ -1212,10 +1237,10 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
                     DB::update(
                         prefix_table("users"),
                         array(
-                            'login' => mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['login'])),
-                            'name' => mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['name'])),
-                            'lastname' => mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['lastname'])),
-                            'email' => mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['email'])),
+                            'login' => $post_login,
+                            'name' => $post_name,
+                            'lastname' => $post_lastname,
+                            'email' => $post_email,
                             'disabled' => $accountDisabled,
                             'isAdministratedByRole' => $dataReceived['managedby'],
                             'groupes_interdits' => empty($dataReceived['forbidFld']) ? '0' : rtrim($dataReceived['forbidFld'], ";"),
@@ -1228,13 +1253,13 @@ if (null !== filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
 
                     // update SESSION
                     if ($_SESSION['user_id'] === $post_id) {
-                        $_SESSION['user_email'] = mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['email']));
-                        $_SESSION['name'] = mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['name']));
-                        $_SESSION['lastname'] = mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['lastname']));
+                        $_SESSION['user_email'] = $post_email;
+                        $_SESSION['name'] = $post_name;
+                        $_SESSION['lastname'] = $post_lastname;
                     }
 
                     // update LOG
-                    if ($oldData['email'] != mysqli_escape_string($link, htmlspecialchars_decode($dataReceived['email']))) {
+                    if ($oldData['email'] !== $post_email) {
                         logEvents('user_mngt', 'at_user_email_changed:'.$oldData['email'], intval($_SESSION['user_id']), $_SESSION['login'], $post_id);
                     }
 

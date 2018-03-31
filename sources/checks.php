@@ -4,8 +4,8 @@
  * @file          checks.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -17,11 +17,11 @@ require_once 'SecureHandler.php';
 
 // Load config
 if (file_exists('../includes/config/tp.config.php')) {
-    require_once '../includes/config/tp.config.php';
+    include_once '../includes/config/tp.config.php';
 } elseif (file_exists('./includes/config/tp.config.php')) {
-    require_once './includes/config/tp.config.php';
+    include_once './includes/config/tp.config.php';
 } elseif (file_exists('../../includes/config/tp.config.php')) {
-    require_once '../../includes/config/tp.config.php';
+    include_once '../../includes/config/tp.config.php';
 } else {
     throw new Exception("Error file '/includes/config/tp.config.php' not exists", 1);
 }
@@ -36,6 +36,10 @@ $pagesRights = array(
         "home", "items", "find", "kb", "favourites", "suggestion", "folders", "manage_roles", "manage_folders",
         "manage_views", "manage_users"
     ),
+    "human_resources" => array(
+        "home", "items", "find", "kb", "favourites", "suggestion", "folders", "manage_roles", "manage_folders",
+        "manage_views", "manage_users"
+    ),
     "admin" => array(
         "home", "items", "find", "kb", "favourites", "suggestion", "folders", "manage_roles", "manage_folders",
         "manage_views", "manage_users", "manage_settings", "manage_main"
@@ -46,21 +50,23 @@ $pagesRights = array(
 Handle CASES
  */
 switch (filter_input(INPUT_POST, 'type', FILTER_SANITIZE_STRING)) {
-    case "checkSessionExists":
-        // Case permit to check if SESSION is still valid
-        session_start();
-        if (isset($_SESSION['CPM']) === true) {
-            echo true;
-        } else {
-            // In case that no session is available
-            // Force the page to be reloaded and attach the CSRFP info
+case "checkSessionExists":
+    // Case permit to check if SESSION is still valid
+    session_start();
+    if (isset($_SESSION['CPM']) === true) {
+        echo "1";
+    } else {
+        // In case that no session is available
+        // Force the page to be reloaded and attach the CSRFP info
 
-            // Load CSRFP
-            $csrfp_array = include('../includes/libraries/csrfp/libs/csrfp.config.php');
+        // Load CSRFP
+        $csrfp_array = include '../includes/libraries/csrfp/libs/csrfp.config.php';
 
-            // Send back CSRFP info
-            echo $csrfp_array['CSRFP_TOKEN'].";".filter_input(INPUT_POST, $csrfp_array['CSRFP_TOKEN'], FILTER_SANITIZE_STRING);
-        }
+        // Send back CSRFP info
+        echo $csrfp_array['CSRFP_TOKEN'].";".filter_input(INPUT_POST, $csrfp_array['CSRFP_TOKEN'], FILTER_SANITIZE_STRING);
+    }
+
+    break;
 }
 
 /**
@@ -72,7 +78,7 @@ function curPage()
     global $SETTINGS;
 
     // Load libraries
-    require_once $SETTINGS['cpassman_dir'].'/includes/libraries/protect/SuperGlobal/SuperGlobal.php';
+    include_once $SETTINGS['cpassman_dir'].'/includes/libraries/protect/SuperGlobal/SuperGlobal.php';
     $superGlobal = new protect\SuperGlobal\SuperGlobal();
 
     // Parse the url
@@ -136,7 +142,7 @@ function checkUser($userId, $userKey, $pageVisited)
 
     // load user's data
     $data = DB::queryfirstrow(
-        "SELECT login, key_tempo, admin, gestionnaire FROM ".prefix_table("users")." WHERE id = %i",
+        "SELECT login, key_tempo, admin, gestionnaire, can_manage_all_users FROM ".prefix_table("users")." WHERE id = %i",
         $userId
     );
 
@@ -148,11 +154,12 @@ function checkUser($userId, $userKey, $pageVisited)
     // check if user is allowed to see this page
     if ($data['admin'] !== '1'
         && $data['gestionnaire'] !== '1'
+        && $data['can_manage_all_users'] !== '1'
         && IsInArray($pageVisited, $pagesRights['user']) === true
     ) {
         return true;
     } elseif ($data['admin'] !== '1'
-        && $data['gestionnaire'] === '1'
+        && ($data['gestionnaire'] === '1' || $data['can_manage_all_users'] === '1')
         && IsInArray($pageVisited, $pagesRights['manager']) === true
     ) {
         return true;

@@ -3,8 +3,8 @@
  * @file          find.queries.php
  * @author        Nils Laumaillé
  * @version       2.1.27
- * @copyright     (c) 2009-2017 Nils Laumaillé
- * @licensing     GNU AFFERO GPL 3.0
+ * @copyright     (c) 2009-2018 Nils Laumaillé
+ * @licensing     GNU GPL-3.0
  * @link          http://www.teampass.net
  *
  * This library is distributed in the hope that it will be useful,
@@ -20,9 +20,9 @@ if (!isset($_SESSION['CPM']) || $_SESSION['CPM'] != 1 || !isset($_SESSION['key']
 
 // Load config
 if (file_exists('../includes/config/tp.config.php')) {
-    require_once '../includes/config/tp.config.php';
+    include_once '../includes/config/tp.config.php';
 } elseif (file_exists('./includes/config/tp.config.php')) {
-    require_once './includes/config/tp.config.php';
+    include_once './includes/config/tp.config.php';
 } else {
     throw new Exception("Error file '/includes/config/tp.config.php' not exists", 1);
 }
@@ -31,7 +31,7 @@ require_once $SETTINGS['cpassman_dir'].'/sources/SplClassLoader.php';
 require_once $SETTINGS['cpassman_dir'].'/sources/main.functions.php';
 
 global $settings, $link;
-include $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
+require $SETTINGS['cpassman_dir'].'/includes/config/settings.php';
 header("Content-type: text/html; charset=utf-8");
 require_once $SETTINGS['cpassman_dir'].'/includes/language/'.$_SESSION['user_language'].'.php';
 
@@ -132,7 +132,7 @@ if (isset($_GET['iSortCol_0'])) {
  * word by word on any field. It's possible to do here, but concerned about efficiency
  * on very large tables, and MySQL's regex functionality is very limited
  */
-if (isset($_GET['sSearch']) && $_GET['sSearch'] != "") {
+if (isset($_GET['sSearch']) === true && empty($_GET['sSearch']) === false) {
     $sWhere .= " AND (";
     for ($i = 0; $i < count($aColumns); $i++) {
         $sWhere .= $aColumns[$i]." LIKE %ss_".$i." OR ";
@@ -214,8 +214,6 @@ if (!isset($_GET['type'])) {
     if (isset($_GET['sEcho'])) {
         $sOutput .= '"sEcho": '.intval($_GET['sEcho']).', ';
     }
-    $sOutput .= '"iTotalRecords": '.$iFilteredTotal.', ';
-    $sOutput .= '"iTotalDisplayRecords": '.$iTotal.', ';
     $sOutput .= '"aaData": [ ';
     $sOutputConst = "";
 
@@ -247,7 +245,7 @@ if (!isset($_GET['type'])) {
             }
             $accessLevel = min($arrTmp);
             if ($accessLevel === 0) {
-                            $checkbox = '&nbsp;<input type=\"checkbox\" value=\"0\" class=\"mass_op_cb\" id=\"mass_op_cb-'.$record['id'].'\">';
+                $checkbox = '&nbsp;<input type=\"checkbox\" value=\"0\" class=\"mass_op_cb\" id=\"mass_op_cb-'.$record['id'].'\">';
             }
         }
 
@@ -292,24 +290,22 @@ if (!isset($_GET['type'])) {
         //col4
         //get restriction from ROles
         $restrictedToRole = false;
-        $rTmp = DB::query(
+        $rTmp = DB::queryFirstColumn(
             "SELECT role_id FROM ".prefix_table("restriction_to_roles")." WHERE item_id = %i",
             $record['id']
         );
-        foreach ($rTmp as $aTmp) {
-            if ($aTmp['role_id'] != "") {
-                if (!in_array($aTmp['role_id'], $_SESSION['user_roles'])) {
-                    $restrictedToRole = true;
-                }
-            }
+        // We considere here that if user has at least one group similar to the object ones
+        // then user can see item
+        if (count(array_intersect($rTmp, $_SESSION['user_roles'])) === 0 && count($rTmp) > 0) {
+            $restrictedToRole = true;
         }
-
+        
         if ((
             $record['perso'] == 1 && $record['author'] != $_SESSION['user_id'])
             ||
             (
-                !empty($record['restricted_to'])
-                && !in_array($_SESSION['user_id'], explode(';', $record['restricted_to']))
+                empty($record['restricted_to']) === false
+                && in_array($_SESSION['user_id'], explode(';', $record['restricted_to'])) === false
             )
             ||
             (
@@ -344,12 +340,19 @@ if (!isset($_GET['type'])) {
 
         if ($getItemInList === true) {
             $sOutputConst .= $sOutputItem;
+        } else {
+            $iFilteredTotal --;
+            $iTotal --;
         }
     }
     if (!empty($sOutputConst)) {
         $sOutput .= substr_replace($sOutputConst, "", -2);
     }
-    $sOutput .= '] }';
+    $sOutput .= '], ';
+
+
+    $sOutput .= '"iTotalRecords": '.$iFilteredTotal.', ';
+    $sOutput .= '"iTotalDisplayRecords": '.$iTotal.' }';
 
     echo $sOutput;
 } elseif (isset($_GET['type']) && ($_GET['type'] == "search_for_items" || $_GET['type'] == "search_for_items_with_tags")) {
@@ -459,13 +462,13 @@ if (!isset($_GET['type'])) {
         } elseif ($record['perso'] == 1
             ||
             (
-                !empty($record['restricted_to'])
-                && !in_array($_SESSION['user_id'], $restricted_users_array)
+                empty($record['restricted_to']) === false
+                && in_array($_SESSION['user_id'], $restricted_users_array) === false
             )
             ||
             (
-                isset($user_is_included_in_role)
-                && isset($item_is_restricted_to_role)
+                isset($user_is_included_in_role) === true
+                && isset($item_is_restricted_to_role) === true
                 && $user_is_included_in_role == 0
                 && $item_is_restricted_to_role == 1
             )
@@ -497,14 +500,14 @@ if (!isset($_GET['type'])) {
 
         // prepare pwd copy if enabled
         $arr_data[$record['id']]['pw_status'] = '';
-        if (isset($SETTINGS['copy_to_clipboard_small_icons']) && $SETTINGS['copy_to_clipboard_small_icons'] === "1") {
+        if (isset($SETTINGS['copy_to_clipboard_small_icons']) === true && $SETTINGS['copy_to_clipboard_small_icons'] === "1") {
             $data_item = DB::queryFirstRow(
                 "SELECT pw
                 from ".prefix_table("items")." WHERE id=%i",
                 $record['id']
             );
 
-            if ($record['perso'] === "1" && isset($_SESSION['user_settings']['session_psk'])) {
+            if ($record['perso'] === "1" && isset($_SESSION['user_settings']['session_psk']) === true) {
                 $pw = cryption(
                     $data_item['pw'],
                     $_SESSION['user_settings']['session_psk'],
@@ -528,8 +531,8 @@ if (!isset($_GET['type'])) {
             $pw = "";
         }
         $arr_data[$record['id']]['pw'] = strtr($pw, '"', "&quot;");
-        $arr_data[$record['id']]['copy_to_clipboard_small_icons'] = $SETTINGS['copy_to_clipboard_small_icons'];
-        $arr_data[$record['id']]['enable_favourites'] = $SETTINGS['enable_favourites'];
+        $arr_data[$record['id']]['copy_to_clipboard_small_icons'] = isset($SETTINGS['copy_to_clipboard_small_icons']) === true ? $SETTINGS['copy_to_clipboard_small_icons'] : '0';
+        $arr_data[$record['id']]['enable_favourites'] = isset($SETTINGS['enable_favourites']) === true ? $SETTINGS['enable_favourites'] : '0';
         if (in_array($record['id'], $_SESSION['favourites'])) {
             $arr_data[$record['id']]['is_favorite'] = 1;
         } else {
